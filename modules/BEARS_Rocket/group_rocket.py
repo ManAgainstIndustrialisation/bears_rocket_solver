@@ -159,6 +159,7 @@ class RocketGroup(Group):
 		# - Mass
 		self.connect("DesignVars.g_payload_mass",          "Mass.payload_mass")
 		self.connect("DesignVars.g_nonprop_mass",          "Mass.nonprop_mass")
+		self.connect("DesignVars.g_diameter",              "Mass.diameter")
 		self.connect("Propulsion.tank_dry_mass",           "Mass.ox_tank_mass")
 		self.connect("Propulsion.press_dry_mass",          "Mass.press_tank_mass")
 		self.connect("Propulsion.press_press_mass",        "Mass.pressurant_mass")

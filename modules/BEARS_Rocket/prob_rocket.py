@@ -6,9 +6,14 @@ from scipy.constants import g
 from openmdao.api    import Problem
 from openmdao.visualization.graph_viewer import GraphViewer
 
-from ..Config     import OptimizationSeedConfig, EfficienciesConfig
 from ..BEARS_Chem import BEARS_Chem
 from ..BEARS_Atmo import BEARS_Atm
+from ..Config     import (
+	OptimizationSeedConfig,
+	EfficienciesConfig,
+	RocketConfig,
+	load_configs,
+)
 
 from .group_rocket import RocketGroup
 from .graph_style  import has_graphviz, style_graph
@@ -22,14 +27,13 @@ class RocketLaunchProblem(Problem):
 		self,
 		atm                 : BEARS_Atm,
 		chem                : BEARS_Chem,
-		payload_mass        : float = 1.0,
-		nonprop_mass        : float = 5.0,
-		target_apogee       : float = 3100.0,
+		cfg_rocket          : RocketConfig | None = None,
+		payload_mass        : float | None = None,
+		nonprop_mass        : float | None = None,
+		target_apogee       : float | None = None,
 		ox_wall_material    = None,
 		press_wall_material = None,
 		press_gas           = None,
-		seed_optim          : OptimizationSeedConfig | None = None,
-		cfg_efficiencies    : EfficienciesConfig | None = None,
 		checks              : tuple[CheckFn, ...] = DEFAULT_ROCKET_CHECKS,
 		**kwargs,
 	):
@@ -51,14 +55,31 @@ class RocketLaunchProblem(Problem):
 		# - Design variables
 
 		# Store payload mass and target apogee as an instance attribute
-		self.payload_mass     = payload_mass
-		self.nonprop_mass     = nonprop_mass
-		self.target_apogee    = target_apogee
-		self.seed_optim       = seed_optim
-		self.cfg_efficiencies = cfg_efficiencies
+		if cfg_rocket is None:
+			cfg_rocket = load_configs()
 
-		eta_t = 0.92 if cfg_efficiencies is None else cfg_efficiencies.trajectory
-		eff_apogee = target_apogee / eta_t
+		self.cfg_rocket = cfg_rocket
+
+		gl = cfg_rocket.cfg_global       if cfg_rocket else None
+		ef = cfg_rocket.cfg_efficiencies if cfg_rocket else None
+		op = cfg_rocket.cfg_optim        if cfg_rocket else None
+
+		self.payload_mass = (
+			payload_mass if payload_mass is not None
+			else gl.payload_mass_kg
+		)
+
+		self.nonprop_mass = (
+			nonprop_mass if nonprop_mass is not None
+			else gl.nonprop_mass_kg
+		)
+
+		self.target_apogee = (
+			target_apogee if target_apogee is not None
+			else (gl.target_altitude_m if gl else 3100.0)
+		)
+
+		eff_apogee = self.target_apogee / ef.trajectory
 
 		self.model.add_design_var(
 			"OptimizationVars.o_propellant_mass",
@@ -125,44 +146,41 @@ class RocketLaunchProblem(Problem):
 	def setup(self, **kwargs):
 		super().setup(**kwargs)
 
+		cfg = self.cfg_rocket
+		gl  = cfg.cfg_global
+		ox  = cfg.cfg_oxy_tank
+		pr  = cfg.cfg_press_tank
+		inj = cfg.cfg_injector
+		fu  = cfg.cfg_fuel
+		nz  = cfg.cfg_nozzle
+		ef  = cfg.cfg_efficiencies
+		so  = cfg.cfg_optim
+
 		# Vehicle parameters
 		self.set_val("DesignVars.g_payload_mass", self.payload_mass, units="kg")
 		self.set_val("DesignVars.g_nonprop_mass", self.nonprop_mass, units="kg")
 
-		self.set_val("DesignVars.g_diameter",                 0.12)
-		self.set_val("DesignVars.press_diam",                 0.12)
-		self.set_val("DesignVars.tank_pressure",              70)
-		self.set_val("DesignVars.tank_diam",                  0.12)
-		self.set_val("DesignVars.injector_cd",                0.7)
-		self.set_val("DesignVars.fuel_port_diam",             0.05)
-		self.set_val("DesignVars.fuel_reg_exponent",          0.5)
-		self.set_val("DesignVars.fuel_reg_ref",               1.0e-4)
-		self.set_val("DesignVars.nozzle_expansion_ratio",     5.0)
+		self.set_val("DesignVars.g_diameter",                 gl.diameter_m)
+		self.set_val("DesignVars.press_diam",                 pr.diam_m)
+		self.set_val("DesignVars.tank_pressure",              ox.pressure_bar)
+		self.set_val("DesignVars.tank_diam",                  ox.diam_m)
+		self.set_val("DesignVars.injector_cd",                inj.cd)
+		self.set_val("DesignVars.fuel_port_diam",             fu.port_diam_m)
+		self.set_val("DesignVars.fuel_reg_exponent",          fu.reg_exponent)
+		self.set_val("DesignVars.fuel_reg_ref",               fu.reg_ref_ms)
+		self.set_val("DesignVars.nozzle_expansion_ratio",     nz.expansion_ratio)
 
-		ef = self.cfg_efficiencies
-		eta_c = 0.88 if ef is None else ef.combustion
-		eta_t = 0.92 if ef is None else ef.trajectory
-		eta_p = 0.92 if ef is None else ef.propellant_utilization
-		eta_r = 0.60 if ef is None else ef.regression_correction
-		eta_n = 0.95 if ef is None else ef.nozzle_friction
-
-		self.set_val("EfficiencyVars.eta_combustion",          eta_c)
-		self.set_val("EfficiencyVars.eta_trajectory",          eta_t)
-		self.set_val("EfficiencyVars.eta_propellant",          eta_p)
-		self.set_val("EfficiencyVars.eta_regression",          eta_r)
-		self.set_val("EfficiencyVars.eta_nozzle_friction",     eta_n)
-
-		so = self.seed_optim
-		m_init  = 5.0    if so is None else so.propellant_mass_kg
-		mr_init = 7.0    if so is None else so.mixture_ratio
-		ai_init = 1.5e-5 if so is None else so.injector_area_m2
-		at_init = 2.0e-4 if so is None else so.nozzle_throat_area_m2
+		self.set_val("EfficiencyVars.eta_combustion",         ef.combustion)
+		self.set_val("EfficiencyVars.eta_trajectory",         ef.trajectory)
+		self.set_val("EfficiencyVars.eta_propellant",         ef.propellant_utilization)
+		self.set_val("EfficiencyVars.eta_regression",         ef.regression_correction)
+		self.set_val("EfficiencyVars.eta_nozzle_friction",    ef.nozzle_friction)
 
 		# Starting point for optimization
-		self.set_val("OptimizationVars.o_propellant_mass",    m_init)
-		self.set_val("OptimizationVars.o_mixture_ratio",      mr_init)
-		self.set_val("OptimizationVars.o_injector_area",      ai_init)
-		self.set_val("OptimizationVars.o_nozzle_throat_area", at_init)
+		self.set_val("OptimizationVars.o_propellant_mass",    so.propellant_mass_kg)
+		self.set_val("OptimizationVars.o_mixture_ratio",      so.mixture_ratio)
+		self.set_val("OptimizationVars.o_injector_area",      so.injector_area_m2)
+		self.set_val("OptimizationVars.o_nozzle_throat_area", so.nozzle_throat_area_m2)
 
 		return self
 

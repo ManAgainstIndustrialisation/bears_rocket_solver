@@ -25,7 +25,12 @@ from modules.BEARS_Atmo      import BEARS_Atm
 from modules.BEARS_Chem      import BEARS_Chem
 from modules.BEARS_Materials import Material, Gas
 from modules.BEARS_Vessels   import LayeredWall
-from modules.BEARS_Rocket    import RocketLaunchProblem, TestStandProblem
+from modules.BEARS_Rocket    import (
+	RocketLaunchProblem,
+	TestStandProblem,
+	sweep_diameters,
+	format_sweep_org_table,
+)
 #endregion
 
 #region Helpers
@@ -103,14 +108,10 @@ def main():
 	prob_rocket = RocketLaunchProblem(
 		atm                 = atm,
 		chem                = chem,
-		payload_mass        = cfg_rocket.cfg_global.payload_mass_kg,
-		nonprop_mass        = cfg_rocket.cfg_global.nonprop_mass_kg,
-		target_apogee       = cfg_rocket.cfg_global.target_altitude_m,
+		cfg_rocket          = cfg_rocket,
 		ox_wall_material    = copv_ox,
 		press_wall_material = copv_press,
 		press_gas           = press_gas,
-		seed_optim          = cfg_rocket.cfg_optim,
-		cfg_efficiencies    = cfg_rocket.cfg_efficiencies,
 		reports             = True,
 		work_dir            = work_dir,
 	)
@@ -161,6 +162,14 @@ def main():
 
 	prob_stand.run()
 	prob_stand.report()
+	#endregion
+
+	#region Diameter sweep
+	diams = [0.125, 0.140, 0.150, 0.160, 0.170]
+
+	sweep_results = sweep_diameters(prob_rocket, diams)
+	print("\n Diameter parameter sweep:")
+	print(format_sweep_org_table(sweep_results))
 	#endregion
 #endregion
 
