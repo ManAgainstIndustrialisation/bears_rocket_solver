@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..BEARS_Materials.material import Material
-from .dome import K_V_ISOTENSOID, dome_shell_volume
+from .dome import (
+	DomeGeometry,
+	IsotensoidDome,
+	SphericalDome,
+)
 from .netting import (
 	clairaut_angle_trig,
 	size_composite_layer,
@@ -131,14 +135,20 @@ class LayeredWall:
 		return tuple(thicknesses)
 
 	def compute_masses(
-		self, thicknesses, r_in, l_cyl, k_v_dome=K_V_ISOTENSOID
+		self,
+		thicknesses,
+		r_in        : float,
+		l_cyl       : float,
+		dome        : DomeGeometry | None = None,
+		r_boss      : float = 0.0,
 	):
 		masses = []
 		r_inner = r_in
+		if dome is None: dome = SphericalDome()
 		for layer, t in zip(self.layers, thicknesses):
 			r_outer = r_inner + t
 			v_cyl   = pi * (r_outer**2 - r_inner**2) * l_cyl
-			v_caps  = dome_shell_volume(r_inner, r_outer, k_v_dome)
+			v_caps  = dome.shell_volume(r_inner, r_outer, r_boss)
 			masses.append((v_cyl + v_caps) * layer.material.density)
 			r_inner = r_outer
 

@@ -13,21 +13,21 @@ def clairaut_angle_trig(r_boss: float, r_out: float) -> tuple[float, float]:
 
 #region Sizing
 def size_composite_layer(
-	p_design: float,
-	r_out: float,
-	sigma_safe: float,
-	cos_sq: float,
-	tan_sq: float,
-	v_f: float
+	p_design   : float,
+	r_out      : float,
+	sigma_safe : float,
+	cos_sq     : float,
+	tan_sq     : float,
+	v_f        : float
 ) -> float:
 	t_hel = (p_design * r_out) / (2.0 * sigma_safe * cos_sq)
 	t_hoop = (p_design * r_out / sigma_safe) * (1.0 - 0.5 * tan_sq)
 	return (t_hel + t_hoop) / v_f
 
 def size_metal_layer(
-	p_design: float,
-	r_out: float,
-	sigma_safe: float
+	p_design   : float,
+	r_out      : float,
+	sigma_safe : float
 ) -> float:
 	return (p_design * r_out) / (sigma_safe + p_design)
 #endregion

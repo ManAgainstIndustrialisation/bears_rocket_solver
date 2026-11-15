@@ -5,7 +5,13 @@ from math         import pi
 from openmdao.api import ExplicitComponent
 
 from ..BEARS_Materials import AL_6061_T6
-from ..BEARS_Vessels   import Layer, LayeredWall
+from ..BEARS_Vessels   import (
+	Layer,
+	LayeredWall,
+	DomeGeometry,
+	IsotensoidDome,
+	SphericalDome,
+)
 # endregion
 
 class TankComponent(ExplicitComponent):
@@ -13,11 +19,14 @@ class TankComponent(ExplicitComponent):
 	def initialize(self):
 		self.options.declare(
 			"wall_material",
-			default=None,
-			types=(LayeredWall, type(None)),
+			default = None,
+			types   = (LayeredWall, type(None)),
 		)
-		self.options.declare("k_v_dome", default=1.4341, types=float)
-		self.options.declare("k_l_dome", default=0.6276, types=float)
+		self.options.declare(
+			"dome_geometry",
+			default = None,
+			types   = (DomeGeometry, type(None)),
+		)
 
 	def setup_fluid_inputs(self):
 		self.add_input("m_fluid",     val=10.0,   units="kg")
@@ -80,11 +89,12 @@ class TankComponent(ExplicitComponent):
 		r_boss = inputs["r_boss"][0]
 		bfwd   = inputs["boss_len_fwd"][0]
 		baft   = inputs["boss_len_aft"][0]
-		k_v    = self.options["k_v_dome"]
-		k_l    = self.options["k_l_dome"]
 
 		wall = self.options["wall_material"]
 		if wall is None: wall = LayeredWall(Layer(AL_6061_T6))
+
+		dome = self.options["dome_geometry"]
+		if dome is None: dome = IsotensoidDome()
 
 		r_out = d_out / 2.0
 		ts = wall.size_layers(p_max, r_out, sf, r_boss=r_boss)
@@ -95,7 +105,7 @@ class TankComponent(ExplicitComponent):
 		# Volumes and lengths
 		v_fluid = m_fluid / rho_f
 		v_int = v_fluid / (1.0 - uf)
-		v_caps = 2.0 * k_v * r_in**3 # Geodesic dome caps
+		v_caps = dome.internal_volume(r_in, r_boss=r_boss)
 
 		diff_v = v_int - v_caps
 		if np.iscomplexobj(diff_v):
@@ -105,9 +115,12 @@ class TankComponent(ExplicitComponent):
 
 		a_int = pi * r_in**2
 		l_cyl = v_cyl / a_int
-		l_tot = l_cyl + 2.0 * k_l * r_in + bfwd + baft
+		l_caps = dome.total_length(r_in, r_boss=r_boss)
+		l_tot = l_cyl + l_caps + bfwd + baft
 
-		m_dry, masses = wall.compute_masses(ts, r_in, l_cyl, k_v_dome=k_v)
+		m_dry, masses = wall.compute_masses(
+			ts, r_in, l_cyl, dome=dome, r_boss=r_boss,
+		)
 
 		outputs["t_layers"]   = np.asarray(ts)
 		outputs["m_layers"]   = np.asarray(masses)

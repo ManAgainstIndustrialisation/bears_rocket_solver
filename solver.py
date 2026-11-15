@@ -167,6 +167,8 @@ def main():
 	#region Diameter sweep
 	diams = [0.125, 0.140, 0.150, 0.160, 0.170]
 
+	return
+
 	sweep_results = sweep_diameters(prob_rocket, diams)
 	print("\n Diameter parameter sweep:")
 	print(format_sweep_org_table(sweep_results))

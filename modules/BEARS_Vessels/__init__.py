@@ -1,8 +1,7 @@
 from .dome import (
-	K_V_ISOTENSOID,
-	K_L_ISOTENSOID,
-	dome_shell_volume,
-	dome_length,
+	DomeGeometry,
+	IsotensoidDome,
+	SphericalDome,
 )
 
 from .netting import (
