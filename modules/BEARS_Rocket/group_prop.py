@@ -19,11 +19,14 @@ class PropulsionGroup(Group):
 		self.options.declare("ox_wall_material",    default=None)
 		self.options.declare("press_wall_material", default=None)
 		self.options.declare("press_gas",           default=None)
+		self.options.declare("press_thermo_model",  default=None, allow_none=True)
 
 	def setup(self):
 		chem       = self.options["chem"]
 		ox_wall    = self.options["ox_wall_material"]
 		press_wall = self.options["press_wall_material"]
+		press_gas  = self.options["press_gas"]
+		press_thm  = self.options["press_thermo_model"]
 
 		self.set_input_defaults("tank_pressure", val=70e5, units="Pa")
 
@@ -67,9 +70,13 @@ class PropulsionGroup(Group):
 			],
 		)
 
+		press_opts = {"wall_material": press_wall, "thermo_model": press_thm}
+		if press_gas is not None:
+			press_opts["gas"] = press_gas
+
 		self.add_subsystem(
 			"PressurantTank",
-			PressurantTankComponent(wall_material=press_wall),
+			PressurantTankComponent(**press_opts),
 			promotes_inputs=[
 				("p_tank_max",    "press_pressure"),
 				("diam_out",      "press_diam"),

@@ -50,6 +50,10 @@ throat_area_m2          = 0.0005
 expansion_ratio         = 5.0
 length_m                = 0.2
 
+[models]
+pressurant_thermo       = "auto" # "auto" | "coolprop" | "ideal"
+pressurant_psat         = false  # Use CoolProp N2O Psat when CoolProp is active
+
 [efficiencies]
 combustion              = 0.88
 trajectory              = 0.92

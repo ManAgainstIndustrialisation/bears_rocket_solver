@@ -8,8 +8,9 @@ version = "2026.11.05"
 license = "GPL-3.0-or-later"
 readme = "README.md"
 dependencies = [
-	"cea",
 	"openmdao",
+	"cea",
+	"coolprop",
 	"isacalc",
 	"rocketpy"
 ]

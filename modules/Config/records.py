@@ -39,17 +39,22 @@ class FuelConfig:
 
 @dataclass(frozen=True)
 class IgniterConfig:
-	burn_time_s           : float = 1.0    # [s]
-	burn_rate_ms          : float = 0.0015 # [m/s]
-	flame_spread_ms       : float = 0.15   # [m/s]
-	max_spread_delay_s    : float = 0.10   # [s]
-	thermite_density_kgm3 : float = 3800.0 # [kg/m^3]
+	burn_time_s             : float = 1.0    # [s]
+	burn_rate_ms            : float = 0.0015 # [m/s]
+	flame_spread_ms         : float = 0.15   # [m/s]
+	max_spread_delay_s      : float = 0.10   # [s]
+	thermite_density_kgm3   : float = 3800.0 # [kg/m^3]
 
 @dataclass(frozen=True)
 class NozzleConfig:
 	throat_area_m2          : float # [m^2]
 	expansion_ratio         : float
 	length_m                : float # [m]
+
+@dataclass(frozen=True)
+class ModelsConfig:
+	pressurant_thermo       : str  = "auto"
+	pressurant_psat         : bool = False
 
 @dataclass(frozen=True)
 class OptimizationSeedConfig:
@@ -124,7 +129,11 @@ class GasConfig:
 	name                    : str
 	molar_mass              : float
 	gamma                   : float
-	z_factor                : float = 1.0
+	coolprop_name           : str   | None = None
+	z_factor                : float        = 1.0
+	t_crit_k                : float | None = None
+	p_crit_pa               : float | None = None
+	acentric                : float        = 0.0
 
 	@property
 	def r_specific(self) -> float:
@@ -134,10 +143,10 @@ class GasConfig:
 class LayerConfig:
 	material_id       : str
 	thickness_m       : float | None = None # None for pressure-sized
-	is_load_bearing   : bool  = True        # False for thermal insulation
+	is_load_bearing   : bool         = True # False for thermal insulation
 	helical_angle_deg : float | None = None # None for isotropic or dynamic boss
-	efficiency        : float = 0.85        # Fiber translation efficiency
-	fiber_volume_frac : float = 0.72        # Fiber volume fraction
+	efficiency        : float        = 0.85 # Fiber translation efficiency
+	fiber_volume_frac : float        = 0.72 # Fiber volume fraction
 
 @dataclass(frozen=True)
 class WallConfig:
@@ -165,6 +174,9 @@ class RocketConfig:
 	cfg_igniter       : IgniterConfig
 	cfg_nozzle        : NozzleConfig
 	cfg_optim         : OptimizationSeedConfig
+	cfg_models        : ModlesConfig = (
+		field(default_factory=ModelsConfig)
+	)
 	cfg_efficiencies  : EfficienciesConfig = (
 		field(default_factory=EfficienciesConfig)
 	)

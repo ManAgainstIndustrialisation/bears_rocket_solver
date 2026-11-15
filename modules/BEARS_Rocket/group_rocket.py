@@ -21,12 +21,15 @@ class RocketGroup(Group):
 		self.options.declare("ox_wall_material",    default=None)
 		self.options.declare("press_wall_material", default=None)
 		self.options.declare("press_gas",           default=None)
+		self.options.declare("press_thermo_model",  default=None)
 
 	def setup(self):
-		chem       = self.options["chem"]
-		atm        = self.options["atm"]
-		ox_wall    = self.options["ox_wall_material"]
-		press_wall = self.options["press_wall_material"]
+		chem         = self.options["chem"]
+		atm          = self.options["atm"]
+		ox_wall      = self.options["ox_wall_material"]
+		press_wall   = self.options["press_wall_material"]
+		press_gas    = self.options["press_gas"]
+		press_thermo = self.options["press_thermo_model"]
 
 		#region Independent variable components
 		# DesignVars:
@@ -105,9 +108,11 @@ class RocketGroup(Group):
 		self.add_subsystem(
 			"Propulsion",
 			PropulsionGroup(
-				chem=chem,
-				ox_wall_material=ox_wall,
-				press_wall_material=press_wall,
+				chem                = chem,
+				ox_wall_material    = ox_wall,
+				press_wall_material = press_wall,
+				press_gas           = press_gas,
+				press_thermo_model  = press_thermo,
 			),
 		)
 

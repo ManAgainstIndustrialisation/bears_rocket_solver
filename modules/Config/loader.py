@@ -17,6 +17,7 @@ from .records import (
 	FuelConfig,
 	IgniterConfig,
 	NozzleConfig,
+	ModelsConfig,
 	OptimizationSeedConfig,
 	EfficienciesConfig,
 	SpeciesConfig,
@@ -86,11 +87,11 @@ def load_configs(
 		yield_factor_pa   = pr["yield_factor_pa"],
 		wall_density_kgm3 = pr["wall_density_kgm3"],
 		ullage_fraction   = pr.get("ullage_fraction",   0.0),
-		boss_opening_m    = ox.get("boss_opening_m",    0.02),
-		boss_length_fwd_m = ox.get("boss_length_fwd_m", 0.015),
-		boss_length_aft_m = ox.get("boss_length_aft_m", 0.019),
-		reg_margin_bar    = ox.get("reg_margin_bar",    20.0),
-		ambient_temp_c    = ox.get("ambient_temp_c",    30.0),
+		boss_opening_m    = pr.get("boss_opening_m",    0.02),
+		boss_length_fwd_m = pr.get("boss_length_fwd_m", 0.015),
+		boss_length_aft_m = pr.get("boss_length_aft_m", 0.019),
+		reg_margin_bar    = pr.get("reg_margin_bar",    20.0),
+		ambient_temp_c    = pr.get("ambient_temp_c",    30.0),
 	)
 
 	c_in = InjectorConfig(**data["injector"])
@@ -117,6 +118,12 @@ def load_configs(
 		propellant_utilization = eff.get("propellant_utilization", 0.92),
 		regression_correction  = eff.get("regression_correction",  0.60),
 		nozzle_friction        = eff.get("nozzle_friction",        0.95),
+	)
+
+	mod = data.get("models", {})
+	c_md = ModelsConfig(
+		pressurant_thermo = mod.get("pressurant_thermo", "auto"),
+		pressurant_psat   = mod.get("pressurant_psat",   False),
 	)
 
 	cfg = RocketConfig(
@@ -217,11 +224,15 @@ def load_fluids(path: str | Path) -> FluidsConfig:
 	gases = []
 	for g in data.get("gas", []):
 		gases.append(GasConfig(
-			id         = g["id"],
-			name       = g["name"],
-			molar_mass = g["molar_mass"],
-			gamma      = g["gamma"],
-			z_factor   = g.get("z_factor", 1.0),
+			id            = g["id"],
+			name          = g["name"],
+			molar_mass    = g["molar_mass"],
+			gamma         = g["gamma"],
+			coolprop_name = g.get("coolprop_name"),
+			z_factor      = g.get("z_factor", 1.0),
+			t_crit_k      = g.get("t_crit_k"),
+			p_crit_pa     = g.get("p_crit_pa"),
+			acentric      = g.get("acentric", 0.0),
 		))
 
 	return FluidsConfig(gases=tuple(gases))

@@ -6,8 +6,9 @@ from scipy.constants import g
 from openmdao.api    import Problem
 from openmdao.visualization.graph_viewer import GraphViewer
 
-from ..BEARS_Chem import BEARS_Chem
-from ..BEARS_Atmo import BEARS_Atm
+from ..BEARS_Chem   import BEARS_Chem
+from ..BEARS_Atmo   import BEARS_Atm
+from ..BEARS_Thermo import create_pressurant_thermo
 from ..Config     import (
 	OptimizationSeedConfig,
 	EfficienciesConfig,
@@ -34,10 +35,22 @@ class RocketLaunchProblem(Problem):
 		ox_wall_material    = None,
 		press_wall_material = None,
 		press_gas           = None,
+		press_thermo_model  = None,
 		checks              : tuple[CheckFn, ...] = DEFAULT_ROCKET_CHECKS,
 		**kwargs,
 	):
 		super().__init__(**kwargs)
+
+		if cfg_rocket is None:
+			cfg_rocket = load_configs()
+
+		self.cfg_rocket = cfg_rocket
+
+		if press_thermo_model is None:
+			press_thermo_model = create_pressurant_thermo(
+				cfg_rocket.cfg_models.pressurant_thermo,
+				use_coolprop_psat=cfg_rocket.cfg_models.pressurant_psat,
+			)
 
 		self.model = RocketGroup(
 			atm                 = atm,
@@ -45,6 +58,7 @@ class RocketLaunchProblem(Problem):
 			ox_wall_material    = ox_wall_material,
 			press_wall_material = press_wall_material,
 			press_gas           = press_gas,
+			press_thermo_model  = press_thermo_model,
 		)
 
 		self.driver = om.ScipyOptimizeDriver()
@@ -55,11 +69,6 @@ class RocketLaunchProblem(Problem):
 		# - Design variables
 
 		# Store payload mass and target apogee as an instance attribute
-		if cfg_rocket is None:
-			cfg_rocket = load_configs()
-
-		self.cfg_rocket = cfg_rocket
-
 		gl = cfg_rocket.cfg_global       if cfg_rocket else None
 		ef = cfg_rocket.cfg_efficiencies if cfg_rocket else None
 		op = cfg_rocket.cfg_optim        if cfg_rocket else None

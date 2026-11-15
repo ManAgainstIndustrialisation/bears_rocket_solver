@@ -96,6 +96,13 @@ def validate_rocket_config(cfg: RocketConfig) -> None:
 	if nz.throat_area_m2 <= 0 or nz.expansion_ratio <= 1.0:
 		errors.append("invalid nozzle throat area or expansion ratio")
 
+	th_mode = cfg.cfg_models.pressurant_thermo
+	if th_mode not in ("auto", "coolprop", "ideal"):
+		errors.append(
+			f"models.pressurant_thermo must be 'auto', 'coolprop', or 'ideal' "
+			f"(got '{th_mode}')"
+		)
+
 	if errors:
 		raise ConfigValidationError(
 			"Invalid RocketConfig:\n  - " + "\n  - ".join(errors)

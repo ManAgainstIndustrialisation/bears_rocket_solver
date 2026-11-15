@@ -10,6 +10,7 @@ from .records import (
 	InjectorConfig,
 	FuelConfig,
 	NozzleConfig,
+	ModelsConfig,
 	OptimizationSeedConfig,
 	EfficienciesConfig,
 	SpeciesConfig,
