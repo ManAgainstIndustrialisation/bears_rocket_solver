@@ -51,6 +51,8 @@ expansion_ratio         = 5.0
 length_m                = 0.2
 
 [models]
+atmosphere              = "auto" # "auto" | "isacalc" | "standalone"
+chemistry               = "auto" # "auto" | "cea" | "rocketcea"
 pressurant_thermo       = "auto" # "auto" | "coolprop" | "ideal"
 pressurant_psat         = false  # Use CoolProp N2O Psat when CoolProp is active
 

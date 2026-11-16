@@ -86,9 +86,10 @@ def main():
 	cfg_rocket = load_configs("inputs/rocket.toml")
 	cfg_reac   = load_reactants("inputs/reactants.toml")
 
-	atm = BEARS_Atm("isacalc")
-
-	chem = BEARS_Chem.from_config(cfg_reac)
+	atm  = BEARS_Atm(cfg_rocket.cfg_models.atmosphere)
+	chem = BEARS_Chem.from_config(
+		cfg_reac, backend=cfg_rocket.cfg_models.chemistry
+	)
 
 	cfg_mat    = load_materials("inputs/materials.toml")
 	cfg_fluids = load_fluids("inputs/fluids.toml")

@@ -122,6 +122,8 @@ def load_configs(
 
 	mod = data.get("models", {})
 	c_md = ModelsConfig(
+		atmosphere        = mod.get("atmosphere",        "auto"),
+		chemistry         = mod.get("chemistry",         "auto"),
 		pressurant_thermo = mod.get("pressurant_thermo", "auto"),
 		pressurant_psat   = mod.get("pressurant_psat",   False),
 	)
@@ -134,6 +136,7 @@ def load_configs(
 		cfg_fuel         = c_fu,
 		cfg_igniter      = c_ig,
 		cfg_nozzle       = c_nz,
+		cfg_models       = c_md,
 		cfg_optim        = c_op,
 		cfg_efficiencies = c_ef,
 	)

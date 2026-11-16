@@ -53,6 +53,8 @@ class NozzleConfig:
 
 @dataclass(frozen=True)
 class ModelsConfig:
+	atmosphere              : str  = "auto"
+	chemistry               : str  = "auto"
 	pressurant_thermo       : str  = "auto"
 	pressurant_psat         : bool = False
 
@@ -174,7 +176,7 @@ class RocketConfig:
 	cfg_igniter       : IgniterConfig
 	cfg_nozzle        : NozzleConfig
 	cfg_optim         : OptimizationSeedConfig
-	cfg_models        : ModlesConfig = (
+	cfg_models        : ModelsConfig = (
 		field(default_factory=ModelsConfig)
 	)
 	cfg_efficiencies  : EfficienciesConfig = (

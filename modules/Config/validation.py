@@ -96,12 +96,18 @@ def validate_rocket_config(cfg: RocketConfig) -> None:
 	if nz.throat_area_m2 <= 0 or nz.expansion_ratio <= 1.0:
 		errors.append("invalid nozzle throat area or expansion ratio")
 
-	th_mode = cfg.cfg_models.pressurant_thermo
-	if th_mode not in ("auto", "coolprop", "ideal"):
-		errors.append(
-			f"models.pressurant_thermo must be 'auto', 'coolprop', or 'ideal' "
-			f"(got '{th_mode}')"
-		)
+	model_choices = {
+		"atmosphere"        : ("auto", "isacalc", "standalone"),
+		"chemistry"         : ("auto", "cea", "rocketcea"),
+		"pressurant_thermo" : ("auto", "cooprop", "ideal"),
+	}
+	for field_name, allowed in model_choices.items():
+		val = getattr(cfg.cfg_models, field_name)
+		if val not in allowed:
+			opts = ", ".join(f"'{a}'" for a in allowed)
+			errors.append(
+				f"models.{field_name} must be ({opts}), got '{val}'"
+			)
 
 	if errors:
 		raise ConfigValidationError(

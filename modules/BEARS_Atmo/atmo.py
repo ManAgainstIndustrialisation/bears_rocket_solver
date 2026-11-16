@@ -1,6 +1,10 @@
 #region imports
 import numpy   as np
-import isacalc as isa
+
+try:
+	import isacalc as isa
+except ImportError:
+	isa = None
 
 from scipy.constants import g, R, zero_Celsius
 #endregion
@@ -40,8 +44,18 @@ model_map = {
 atmosphere_models = list(model_map.keys())
 
 class BEARS_Atm:
-	def __init__(self, model: str):
-		self.model = model
+	def __init__(self, model: str = "auto"):
+		match model:
+			case "auto":
+				self.model = "isacalc" if isa is not None else "standalone"
+			case "isacalc":
+				if isa is None:
+					raise ImportError("isacalc package is not installed")
+				self.model = model
+			case "standalone":
+				self.model = model
+			case _:
+				raise ValueError(f"Unknown atmosphere model: '{model}'")
 
 	def __call__(self, altitude: float):
 		return model_map[self.model](altitude)
