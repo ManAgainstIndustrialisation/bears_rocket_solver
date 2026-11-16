@@ -19,7 +19,7 @@ boss_length_aft_m       = 0.019
 [pressurizer_tank]
 pressure_bar            = 200.0
 diam_m                  = 0.12
-safety_factor           = 2.0
+safety_factor           = 3.0
 yield_factor_pa         = 2.76e8
 wall_density_kgm3       = 2700.0
 boss_opening_m          = 0.02

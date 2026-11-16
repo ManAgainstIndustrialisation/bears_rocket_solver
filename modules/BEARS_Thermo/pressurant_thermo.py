@@ -5,6 +5,7 @@ from typing      import Protocol, runtime_checkable
 import numpy as np
 
 from ..BEARS_Materials import Gas
+from ..BEARS_Vessels   import ullage_volume
 #endregion
 
 #region Blowdown results
@@ -52,7 +53,8 @@ class IdealGasBlowdown:
 		self, gas: Gas, p_bottle, p_ox, p_margin, p_sat, t0, v_ox, u_frac,
 	) -> BlowdownResult:
 		r, g = gas.r_specific, gas.gamma
-		m_pad = _pos_pad(p_ox, p_sat) * (u_frac * v_ox) / (r * t0)
+		v_u0 = ullage_volume(v_ox, u_frac)
+		m_pad = _pos_pad(p_ox, p_sat) * v_u0 / (r * t0)
 		pr = (p_ox + p_margin) / p_bottle
 		f_del = 1.0 - pr ** (1.0 / g)
 		t_mean = (t0 / g) * (1.0 - pr) / f_del
@@ -77,7 +79,7 @@ class CoolPropBlowdown:
 		from scipy.optimize    import brentq
 
 		fl = gas.coolprop_name or gas.name
-		t0_f, p_b_f = float(t0), float(p_bottle)
+		t0_f,   p_b_f  = float(t0), float(p_bottle)
 		p_ox_f, v_ox_f = float(p_ox), float(v_ox)
 		p_end = p_ox_f + float(p_margin)
 
@@ -90,7 +92,7 @@ class CoolPropBlowdown:
 		h_in  = float(np.sum(0.5 * (hs[:-1] + hs[1:]) * dm) / np.sum(dm))
 		f_del = float(1.0 - rhos[-1] / rho0)
 
-		v_u0 = float(u_frac) * v_ox_f
+		v_u0 = ullage_volume(v_ox_f, u_frac)
 		v_u1 = v_u0 + v_ox_f
 		rho1 = PropsSI("D", "T", t0_f, "P", p_ox_f, fl)
 		u1   = PropsSI("U", "T", t0_f, "P", p_ox_f, fl)
