@@ -30,7 +30,7 @@ ambient_temp_c          = 30.0
 
 [injector]
 area_m2                 = 4.5e-5
-cd                      = 0.7
+cd                      = 0.25
 
 [fuel]
 port_diam_m             = 0.05
