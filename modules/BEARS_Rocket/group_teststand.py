@@ -1,21 +1,18 @@
 #region Imports
-import openmdao.api as om
-
 from openmdao.api import Group, IndepVarComp
 
-from ..BEARS_Chem import BEARS_Chem
+from ..BEARS_Chem    import BEARS_Chem
+from ..BEARS_Vessels import LayeredWall
 
 from .comp_tank    import TankComponent
-from .comp_split   import PropellantSplitComponent
 from .group_engine import HybridEngineGroup
 #endregion
 
 class TestStandGroup(Group):
 
 	def initialize(self):
-		self.options.declare("chem",                    types=BEARS_Chem)
-		self.options.declare("rho_ox",   default=750.0, types=float)
-		self.options.declare("rho_fuel", default=900.0, types=float)
+		self.options.declare("chem",          types=BEARS_Chem)
+		self.options.declare("run_tank_wall", types=LayeredWall)
 
 	def setup(self):
 		chem = self.options["chem"]
@@ -37,15 +34,13 @@ class TestStandGroup(Group):
 		# Run tank (PT2)
 		self.add_subsystem(
 			"RunTank",
-			TankComponent(),
+			TankComponent(wall_material=self.options["run_tank_wall"]),
 			promotes_inputs=[
 				("m_fluid",     "run_tank_fluid_mass"),
 				("rho_fluid",   "run_tank_density"),
 				("p_tank_max",  "run_tank_pressure_PT2"),
 				("diam_out",    "run_tank_diam"),
 				("ullage_frac", "run_tank_ullage_frac"),
-				("rho_wall",    "run_tank_wall_density"),
-				("sigma_y",     "run_tank_yield_factor"),
 			],
 			promotes_outputs=[
 				("v_internal",  "run_tank_volume"),

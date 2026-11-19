@@ -1,9 +1,9 @@
 #region Imports
-import openmdao.api as om
-
 from openmdao.api import Group, IndepVarComp
 
-from ..BEARS_Chem import BEARS_Chem
+from ..BEARS_Chem      import BEARS_Chem
+from ..BEARS_Materials import Gas
+from ..BEARS_Vessels   import LayeredWall
 
 from .comp_tank       import TankComponent
 from .comp_split      import PropellantSplitComponent
@@ -12,14 +12,20 @@ from .comp_tank_press import PressurantTankComponent
 from .group_engine    import HybridEngineGroup
 #endregion
 
-class TestStandGroup(Group):
+class TestStandFlightGroup(Group):
+	"""
+	Test stand fed either by the facility run tank (`facility`) or by the
+	flight oxidizer and pressurant tanks (`flight`)
+	"""
 
 	def initialize(self):
-		self.options.declare("chem",                          types=BEARS_Chem)
-		self.options.declare("rho_ox",         default=750.0, types=float)
-		self.options.declare("rho_fuel",       default=900.0, types=float)
-		self.options.declare("ox_wall_mat",    default=None)
-		self.options.declare("press_wall_mat", default=None)
+		self.options.declare("chem", types=BEARS_Chem)
+
+		# Facility mode needs `run_tank_wall`, flight mode the other three
+		self.options.declare("run_tank_wall",  default=None, types=LayeredWall, allow_none=True)
+		self.options.declare("ox_wall_mat",    default=None, types=LayeredWall, allow_none=True)
+		self.options.declare("press_wall_mat", default=None, types=LayeredWall, allow_none=True)
+		self.options.declare("press_gas",      default=None, types=Gas,         allow_none=True)
 
 		self.options.declare(
 			"tank_mode",
@@ -31,6 +37,16 @@ class TestStandGroup(Group):
 		chem = self.options["chem"]
 
 		mode = self.options["tank_mode"]
+
+		required = {
+			"facility": ("run_tank_wall",),
+			"flight":   ("ox_wall_mat", "press_wall_mat", "press_gas"),
+		}[mode]
+		missing = [name for name in required if self.options[name] is None]
+		if missing:
+			raise ValueError(
+				f"tank_mode '{mode}' requires option(s): {', '.join(missing)}"
+			)
 
 		ox_wall    = self.options["ox_wall_mat"]
 		press_wall = self.options["press_wall_mat"]
@@ -46,34 +62,27 @@ class TestStandGroup(Group):
 		#endregion
 
 		#region Subsystems
-
 		match mode:
 			case "facility":
 
 				self.set_input_defaults(
-					"run_tank_pressure_PT2", val=60e5,        units="Pa"
+					"run_tank_density",    val=chem.rho_ox, units="kg/m**3"
 				)
 
 				self.set_input_defaults(
-					"run_tank_density",      val=chem.rho_ox, units="kg/m**3"
-				)
-
-				self.set_input_defaults(
-					"run_tank_fluid_mass",   val=10.0,        units="kg"
+					"run_tank_fluid_mass", val=10.0,        units="kg"
 				)
 
 				# Run tank (PT2)
 				self.add_subsystem(
 					"RunTank",
-					TankComponent(),
+					TankComponent(wall_material=self.options["run_tank_wall"]),
 					promotes_inputs=[
 						("m_fluid",     "run_tank_fluid_mass"),
 						("rho_fluid",   "run_tank_density"),
 						("p_tank_max",  "run_tank_pressure_PT2"),
 						("diam_out",    "run_tank_diam"),
 						("ullage_frac", "run_tank_ullage_frac"),
-						("rho_wall",    "run_tank_wall_density"),
-						("sigma_y",     "run_tank_yield_factor"),
 					],
 					promotes_outputs=[
 						("v_internal",  "run_tank_volume"),
@@ -90,14 +99,6 @@ class TestStandGroup(Group):
 				feed_press_var = "run_tank_pressure_PT2"
 
 			case "flight":
-
-				self.set_input_defaults(
-					"tank_pressure",  val=60e5,  units="Pa"
-				)
-
-				self.set_input_defaults(
-					"press_pressure", val=200e5, units="Pa"
-				)
 
 				self.add_subsystem(
 					"PropSplit",
@@ -118,9 +119,7 @@ class TestStandGroup(Group):
 						("p_tank_max",    "tank_pressure"),
 						("diam_out",      "tank_diam"),
 						("ullage_frac",   "tank_ullage_frac"),
-						("sigma_y",       "tank_yield_factor"),
 						("safety_factor", "tank_safety_factor"),
-						("rho_wall",      "tank_wall_density"),
 					],
 					promotes_outputs=[
 						("m_tank_dry",    "tank_dry_mass"),
@@ -134,13 +133,17 @@ class TestStandGroup(Group):
 
 				self.add_subsystem(
 					"PressurantTank",
-					PressurantTankComponent(wall_material=press_wall),
+					PressurantTankComponent(
+						wall_material = press_wall,
+						gas           = self.options["press_gas"],
+					),
 					promotes_inputs=[
-						("p_tank_max",    "press_pressure"),
-						("diam_out",      "press_diam"),
-						("sigma_y",       "press_yield_factor"),
-						("safety_factor", "press_safety_factor"),
-						("rho_wall",      "press_wall_density"),
+						("p_tank_max",     "press_pressure"),
+						("diam_out",       "press_diam"),
+						("safety_factor",  "press_safety_factor"),
+						("p_ox",           "tank_pressure"),
+						("ox_ullage_frac", "tank_ullage_frac"),
+						("p_sat",          "tank_vapor_pressure"),
 					],
 					promotes_outputs=[
 						("m_tank_dry",    "press_dry_mass"),
@@ -151,6 +154,15 @@ class TestStandGroup(Group):
 						("rho_press",     "press_press_density"),
 					],
 				)
+
+				# Flight tank pressures are read off the PT2 and PT4 sensors
+				self.connect("Sensors.PT2_run_tank_pressure",  "tank_pressure")
+				self.connect("Sensors.PT4_N2_supply_pressure", "press_pressure")
+
+				self.set_input_defaults("tank_ullage_frac", val=0.10)
+
+				self.connect("PropSplit.m_ox",       "OxidizerTank.m_oxy")
+				self.connect("OxidizerTank.v_fluid", "PressurantTank.v_ox_displace")
 
 				feed_press_var = "tank_pressure"
 

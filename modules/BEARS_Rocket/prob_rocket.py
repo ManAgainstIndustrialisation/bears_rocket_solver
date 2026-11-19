@@ -1,26 +1,21 @@
 #region Imports
-import os
 import openmdao.api as om
 
-from scipy.constants import g
-from openmdao.api    import Problem
-from openmdao.visualization.graph_viewer import GraphViewer
+from openmdao.api import Problem
 
-from ..BEARS_Chem   import BEARS_Chem
-from ..BEARS_Atmo   import BEARS_Atm
-from ..BEARS_Thermo import create_pressurant_thermo
-from ..Config     import (
-	OptimizationSeedConfig,
-	EfficienciesConfig,
-	RocketConfig,
-	load_configs,
-)
+from ..BEARS_Chem      import BEARS_Chem
+from ..BEARS_Materials import Gas
+from ..BEARS_Vessels   import LayeredWall
+from ..BEARS_Atmo      import BEARS_Atm
+from ..BEARS_Thermo    import create_pressurant_thermo
+from ..Config          import RocketConfig, CONSTANTS, load_configs
 
 from .group_rocket import RocketGroup
-from .graph_style  import has_graphviz, style_graph
-
-from .checks  import CheckFn, DEFAULT_ROCKET_CHECKS, run_checks
+from .reporting    import write_output_table, write_graphs
+from .checks       import CheckFn, DEFAULT_ROCKET_CHECKS, run_checks
 #endregion
+
+g = CONSTANTS.universal.standard_gravity # Standard gravity [m/s^2]
 
 class RocketLaunchProblem(Problem):
 
@@ -28,13 +23,13 @@ class RocketLaunchProblem(Problem):
 		self,
 		atm                 : BEARS_Atm,
 		chem                : BEARS_Chem,
+		ox_wall_material    : LayeredWall,
+		press_wall_material : LayeredWall,
+		press_gas           : Gas,
 		cfg_rocket          : RocketConfig | None = None,
 		payload_mass        : float | None = None,
 		nonprop_mass        : float | None = None,
 		target_apogee       : float | None = None,
-		ox_wall_material    = None,
-		press_wall_material = None,
-		press_gas           = None,
 		press_thermo_model  = None,
 		checks              : tuple[CheckFn, ...] = DEFAULT_ROCKET_CHECKS,
 		**kwargs,
@@ -68,10 +63,8 @@ class RocketLaunchProblem(Problem):
 
 		# - Design variables
 
-		# Store payload mass and target apogee as an instance attribute
-		gl = cfg_rocket.cfg_global       if cfg_rocket else None
-		ef = cfg_rocket.cfg_efficiencies if cfg_rocket else None
-		op = cfg_rocket.cfg_optim        if cfg_rocket else None
+		# Explicit arguments override the config file values
+		gl = cfg_rocket.cfg_global
 
 		self.payload_mass = (
 			payload_mass if payload_mass is not None
@@ -85,10 +78,10 @@ class RocketLaunchProblem(Problem):
 
 		self.target_apogee = (
 			target_apogee if target_apogee is not None
-			else (gl.target_altitude_m if gl else 3100.0)
+			else gl.target_altitude_m
 		)
 
-		eff_apogee = self.target_apogee / ef.trajectory
+		eff_apogee = self.target_apogee / cfg_rocket.cfg_efficiencies.trajectory
 
 		self.model.add_design_var(
 			"OptimizationVars.o_propellant_mass",
@@ -166,18 +159,40 @@ class RocketLaunchProblem(Problem):
 		so  = cfg.cfg_optim
 
 		# Vehicle parameters
-		self.set_val("DesignVars.g_payload_mass", self.payload_mass, units="kg")
-		self.set_val("DesignVars.g_nonprop_mass", self.nonprop_mass, units="kg")
+		self.set_val("DesignVars.g_payload_mass",    self.payload_mass,  units="kg")
+		self.set_val("DesignVars.g_nonprop_mass",    self.nonprop_mass,  units="kg")
+		self.set_val("DesignVars.g_target_altitude", self.target_apogee, units="m")
+		self.set_val("DesignVars.g_diameter",        gl.diameter_m,      units="m")
+		self.set_val("DesignVars.g_clearance",       gl.clearance_m,     units="m")
 
-		self.set_val("DesignVars.g_diameter",                 gl.diameter_m)
-		self.set_val("DesignVars.press_diam",                 pr.diam_m)
-		self.set_val("DesignVars.tank_pressure",              ox.pressure_bar)
-		self.set_val("DesignVars.tank_diam",                  ox.diam_m)
-		self.set_val("DesignVars.injector_cd",                inj.cd)
-		self.set_val("DesignVars.fuel_port_diam",             fu.port_diam_m)
-		self.set_val("DesignVars.fuel_reg_exponent",          fu.reg_exponent)
-		self.set_val("DesignVars.fuel_reg_ref",               fu.reg_ref_ms)
-		self.set_val("DesignVars.nozzle_expansion_ratio",     nz.expansion_ratio)
+		# Oxidizer tank
+		self.set_val("DesignVars.tank_pressure",        ox.pressure_bar,      units="bar")
+		self.set_val("DesignVars.tank_diam",            ox.diam_m,            units="m")
+		self.set_val("DesignVars.tank_safety_factor",   ox.safety_factor)
+		self.set_val("DesignVars.tank_ullage_fraction", ox.ullage_fraction)
+		self.set_val("DesignVars.tank_boss_opening",    ox.boss_opening_m,    units="m")
+		self.set_val("DesignVars.tank_boss_len_fwd",    ox.boss_length_fwd_m, units="m")
+		self.set_val("DesignVars.tank_boss_len_aft",    ox.boss_length_aft_m, units="m")
+		self.set_val("DesignVars.tank_vapor_pressure",  ox.vapor_pressure_bar, units="bar")
+
+		# Pressurant tank
+		self.set_val("DesignVars.press_pressure",       pr.pressure_bar,      units="bar")
+		self.set_val("DesignVars.press_diam",           pr.diam_m,            units="m")
+		self.set_val("DesignVars.press_safety_factor",  pr.safety_factor)
+		self.set_val("DesignVars.press_boss_opening",   pr.boss_opening_m,    units="m")
+		self.set_val("DesignVars.press_boss_len_fwd",   pr.boss_length_fwd_m, units="m")
+		self.set_val("DesignVars.press_boss_len_aft",   pr.boss_length_aft_m, units="m")
+		self.set_val("DesignVars.press_reg_margin",     pr.reg_margin_bar,    units="bar")
+		self.set_val("DesignVars.press_ambient_temp",   pr.ambient_temp_c,    units="degC")
+
+		# Engine
+		self.set_val("DesignVars.injector_cd",            inj.cd)
+		self.set_val("DesignVars.fuel_port_diam",         fu.port_diam_m,             units="m")
+		self.set_val("DesignVars.fuel_reg_exponent",      fu.reg_exponent)
+		self.set_val("DesignVars.fuel_reg_ref",           fu.reg_ref_ms,              units="m/s")
+		self.set_val("DesignVars.fuel_oxy_mass_flux_ref", fu.oxy_mass_flux_ref_kgm2s, units="kg/(m**2*s)")
+		self.set_val("DesignVars.nozzle_expansion_ratio", nz.expansion_ratio)
+		self.set_val("DesignVars.nozzle_length",          nz.length_m,                units="m")
 
 		self.set_val("EfficiencyVars.eta_combustion",         ef.combustion)
 		self.set_val("EfficiencyVars.eta_trajectory",         ef.trajectory)
@@ -250,53 +265,18 @@ class RocketLaunchProblem(Problem):
 
 	def print_parameters(self, path: str = "outputs/rocket.txt"):
 		"""Dump all computed variables to an output file"""
-
-		os.makedirs(os.path.dirname(path), exist_ok=True)
-		with open(path, mode="wt") as f:
-			self.model.list_outputs(
-				val          = True,
-				units        = True,
-				hierarchical = True,
-				out_stream   = f,
-			)
+		write_output_table(self.model, path)
 
 	def print_graphs(self, out_dir: str = "figures", prefix: str = "rocket"):
 		"""Draw all the connectivity graphs, provided Graphviz is installed"""
-
-		if not has_graphviz():
-			print(f"Graphviz ('dot') not found, skipping {prefix} graphs")
-			return
-
-		os.makedirs(out_dir, exist_ok=True)
-		viewer = GraphViewer(self.model)
-		for gtype in ["dataflow", "tree", "cycle"]:
-			png_path = os.path.join(out_dir, f"{prefix}_{gtype}.png")
-			svg_path = os.path.join(out_dir, f"{prefix}_{gtype}.svg")
-			dot = viewer.write_graph(
-				gtype     = gtype,
-				display   = False,
-				show_vars = True,
-				#exclude   = ("_auto_ivc",),
-				outfile   = png_path,
-			)
-			if dot is not None:
-				match gtype:
-					case "dataflow":
-						# "spline" | "ortho" | "curved" | "line" | "polyline"
-						splines = "spline" 
-					case "tree":
-						splines = "spline"
-					case "cycle":
-						splines = "spline"
-				dot = style_graph(dot, splines=splines, concentrate=True)
-				dot.write_png(png_path)
+		write_graphs(self.model, out_dir, prefix)
 
 	def report(
 		self,
 		out_txt : str  = "outputs/rocket.txt",
 		graphs  : bool = True,
 	):
-		"""Print results and generate output artifacts"""
+		"""Print results and generate output files"""
 
 		self.print_summary()
 		self.print_parameters(out_txt)

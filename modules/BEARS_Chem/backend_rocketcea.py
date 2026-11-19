@@ -1,8 +1,7 @@
 #region Imports
-import os
+from typing import TYPE_CHECKING
 
-from pathlib import Path
-from typing  import TYPE_CHECKING
+from ..Config import CONSTANTS
 
 if TYPE_CHECKING: from .reac import Reactant
 #endregion
@@ -17,17 +16,10 @@ class RocketCEABackend:
 		self,
 		ox_reactants   : tuple["Reactant", ...],
 		fuel_reactants : tuple["Reactant", ...],
-		work_dir       : str | Path | None = None,
 	):
-		import rocketcea.cea_obj as cea_obj
 		from rocketcea.cea_obj     import CEA_Obj, add_new_fuel, add_new_oxidizer
 		from rocketcea.input_cards import oxCards, fuelCards
 		from .helpers              import gencard
-
-		if work_dir is not None:
-			abs_path = os.path.abspath(work_dir)
-			os.makedirs(abs_path, exists_ok=True)
-			cea_obj.ROCKETCEA_DATA_DIR = abs_path
 
 		reac_cards = {"oxid": oxCards, "fuel": fuelCards}
 		rnames : dict[str, str] = {}
@@ -52,7 +44,7 @@ class RocketCEABackend:
 		pc_pa    : float,
 		mr       : float,
 		eps      : float,
-		p_amb_pa : float = 101325.0,
+		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
 	) -> float:
 		pc_psia = pc_pa * PA_TO_PSIA
 

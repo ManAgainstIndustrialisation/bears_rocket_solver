@@ -1,9 +1,13 @@
 #region Imports
 import numpy as np
 
-from scipy.constants import pi, g
-from openmdao.api    import ExplicitComponent
+from math         import pi
+from openmdao.api import ExplicitComponent
+
+from ..Config import CONSTANTS
 #endregion
+
+g = CONSTANTS.universal.standard_gravity # Standard gravity [m/s^2]
 
 class NozzleComponent(ExplicitComponent):
 
@@ -51,7 +55,6 @@ class NozzleComponent(ExplicitComponent):
 
 		contour = self.options["contour_type"]
 
-		DEG2RAD = pi / 180.0
 		RAD2DEG = 180.0 / pi
 
 		r_t = np.sqrt(a_t / pi)
@@ -67,8 +70,6 @@ class NozzleComponent(ExplicitComponent):
 				lam, theta_e = self._compute_rao(r_t, r_e, length)
 			case "custom":
 				lam, theta_e = self._compute_custom(r_t, r_e, length)
-			case _:
-				lam, theta_e = self._compute_conical(r_t, r_e, length)
 
 		eta_nozzle    = lam * eta_fr
 		isp_delivered = isp * eta_nozzle

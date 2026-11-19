@@ -1,5 +1,5 @@
 #region Imports
-from dataclasses import dataclass
+from dataclasses import fields
 from pathlib     import Path
 
 import tomllib
@@ -22,15 +22,19 @@ from .records import (
 	EfficienciesConfig,
 	SpeciesConfig,
 	BipropellantConfig,
-	PropellantConfig,
 	RocketConfig,
 )
 
-from .validation import validate_rocket_config, validate_bipropellant_config
+from .validation import (
+	ConfigValidationError,
+	validate_rocket_config,
+	validate_bipropellant_config,
+)
 #endregion
 
+#region Helpers
 def deep_merge(base: dict, overlay: dict) -> dict:
-	# Helper function for merging dictionaries
+	"""Recursively merge `overlay` into a copy of `base`"""
 	merged = dict(base)
 	for k, v in overlay.items():
 		if (
@@ -44,6 +48,24 @@ def deep_merge(base: dict, overlay: dict) -> dict:
 
 	return merged
 
+def build_section(cls, data: dict, section: str, **extra):
+	"""
+	Construct the config dataclass `cls` from the TOML table `data`
+
+	Unknown keys are rejected so that stale or misspelled input entries are
+	reported instead of being silently ignored
+	"""
+	allowed = {f.name for f in fields(cls)} - set(extra)
+	unknown = sorted(set(data) - allowed)
+	if unknown:
+		raise ConfigValidationError(
+			f"Unknown key(s) in [{section}]: {', '.join(unknown)}"
+		)
+
+	return cls(**data, **extra)
+#endregion
+
+#region Loaders
 def load_configs(
 	path         : str | Path | None = "inputs/rocket.toml",
 	default_path : str | Path        = "inputs/rocket.default.toml",
@@ -60,85 +82,23 @@ def load_configs(
 			and user_file.resolve() != Path(default_path).resolve()
 		):
 			with open(user_file, "rb") as f:
-				n_data = tomllib.load(f)
-				data = deep_merge(data, n_data)
-
-	ox = data["oxidizer_tank"]
-	pr = data["pressurizer_tank"]
-
-	c_gl = GlobalConfig(**data["global"])
-
-	c_ox = TankConfig(
-		pressure_bar      = ox["pressure_bar"],
-		diam_m            = ox["diam_m"],
-		safety_factor     = ox["safety_factor"],
-		yield_factor_pa   = ox["yield_factor_pa"],
-		wall_density_kgm3 = ox["wall_density_kgm3"],
-		ullage_fraction   = ox.get("ullage_fraction",   0.0),
-		boss_opening_m    = ox.get("boss_opening_m",    0.02),
-		boss_length_fwd_m = ox.get("boss_length_fwd_m", 0.015),
-		boss_length_aft_m = ox.get("boss_length_aft_m", 0.019),
-	)
-
-	c_pr = TankConfig(
-		pressure_bar      = pr["pressure_bar"],
-		diam_m            = pr["diam_m"],
-		safety_factor     = pr["safety_factor"],
-		yield_factor_pa   = pr["yield_factor_pa"],
-		wall_density_kgm3 = pr["wall_density_kgm3"],
-		ullage_fraction   = pr.get("ullage_fraction",   0.0),
-		boss_opening_m    = pr.get("boss_opening_m",    0.02),
-		boss_length_fwd_m = pr.get("boss_length_fwd_m", 0.015),
-		boss_length_aft_m = pr.get("boss_length_aft_m", 0.019),
-		reg_margin_bar    = pr.get("reg_margin_bar",    20.0),
-		ambient_temp_c    = pr.get("ambient_temp_c",    30.0),
-	)
-
-	c_in = InjectorConfig(**data["injector"])
-
-	c_fu = FuelConfig(**data["fuel"])
-
-	ign = data.get("igniter", {})
-	c_ig = IgniterConfig(
-		burn_time_s           = ign.get("burn_time_s",           1.0),
-		burn_rate_ms          = ign.get("burn_rate_ms",          0.0015),
-		flame_spread_ms       = ign.get("flame_spread_ms",       0.15),
-		max_spread_delay_s    = ign.get("max_spread_delay_s",    0.10),
-		thermite_density_kgm3 = ign.get("thermite_density_kgm3", 3800.0),
-	)
-
-	c_nz = NozzleConfig(**data["nozzle"])
-
-	c_op = OptimizationSeedConfig(**data["optimization"])
-
-	eff = data.get("efficiencies", {})
-	c_ef = EfficienciesConfig(
-		combustion             = eff.get("combustion",             0.88),
-		trajectory             = eff.get("trajectory",             0.92),
-		propellant_utilization = eff.get("propellant_utilization", 0.92),
-		regression_correction  = eff.get("regression_correction",  0.60),
-		nozzle_friction        = eff.get("nozzle_friction",        0.95),
-	)
-
-	mod = data.get("models", {})
-	c_md = ModelsConfig(
-		atmosphere        = mod.get("atmosphere",        "auto"),
-		chemistry         = mod.get("chemistry",         "auto"),
-		pressurant_thermo = mod.get("pressurant_thermo", "auto"),
-		pressurant_psat   = mod.get("pressurant_psat",   False),
-	)
+				data = deep_merge(data, tomllib.load(f))
 
 	cfg = RocketConfig(
-		cfg_global       = c_gl,
-		cfg_oxy_tank     = c_ox,
-		cfg_press_tank   = c_pr,
-		cfg_injector     = c_in,
-		cfg_fuel         = c_fu,
-		cfg_igniter      = c_ig,
-		cfg_nozzle       = c_nz,
-		cfg_models       = c_md,
-		cfg_optim        = c_op,
-		cfg_efficiencies = c_ef,
+		cfg_global       = build_section(GlobalConfig,   data["global"],           "global"),
+		cfg_oxy_tank     = build_section(TankConfig,     data["oxidizer_tank"],    "oxidizer_tank"),
+		cfg_press_tank   = build_section(TankConfig,     data["pressurizer_tank"], "pressurizer_tank"),
+		cfg_injector     = build_section(InjectorConfig, data["injector"],         "injector"),
+		cfg_fuel         = build_section(FuelConfig,     data["fuel"],             "fuel"),
+		cfg_igniter      = build_section(IgniterConfig,  data.get("igniter", {}),  "igniter"),
+		cfg_nozzle       = build_section(NozzleConfig,   data["nozzle"],           "nozzle"),
+		cfg_models       = build_section(ModelsConfig,   data.get("models", {}),   "models"),
+		cfg_optim        = build_section(
+			OptimizationSeedConfig, data["optimization"], "optimization"
+		),
+		cfg_efficiencies = build_section(
+			EfficienciesConfig, data.get("efficiencies", {}), "efficiencies"
+		),
 	)
 
 	if validate: validate_rocket_config(cfg)
@@ -153,17 +113,9 @@ def load_reactants(
 		data = tomllib.load(f)
 
 	def parse_entry(r: dict, role: str) -> SpeciesConfig:
-		return SpeciesConfig(
-			name           = r["name"],
-			formula_parts  = tuple(r.get("formula_parts", ())),
-			mass_fraction  = r.get("mass_fraction", 100.0),
-			temperature_k  = r.get("temperature_k", 298.15),
-			enthalpy       = r.get("enthalpy"),
-			enthalpy_units = r.get("enthalpy_units"),
-			density        = r.get("density"),
-			density_units  = r.get("density_units"),
-			role           = role,
-		)
+		entry = dict(r)
+		entry["formula_parts"] = tuple(entry.get("formula_parts", ()))
+		return build_section(SpeciesConfig, entry, role, role=role)
 
 	fuels = tuple(parse_entry(r, "fuel") for r in data["fuel"])
 	oxids = tuple(parse_entry(r, "oxid") for r in data["oxid"])
@@ -207,13 +159,11 @@ def load_materials(path: str | Path) -> MaterialsConfig:
 	for w in data.get("wall", []):
 		layers = []
 		for lay in w["layers"]:
-			layers.append(LayerConfig(
-				material_id       = lay["material"],
-				thickness_m       = lay.get("thickness_m"),
-				is_load_bearing   = lay.get("is_load_bearing", True),
-				helical_angle_deg = lay.get("helical_angle_deg"),
-				efficiency        = lay.get("efficiency", 0.85),
-				fiber_volume_frac = lay.get("fiber_volume_frac", 0.72),
+			lay = dict(lay)
+			material_id = lay.pop("material")
+			layers.append(build_section(
+				LayerConfig, lay, f"wall '{w['id']}' layer",
+				material_id=material_id,
 			))
 
 		walls.append(WallConfig(id=w["id"], layers=tuple(layers)))
@@ -224,18 +174,9 @@ def load_fluids(path: str | Path) -> FluidsConfig:
 	with open(path, "rb") as f:
 		data = tomllib.load(f)
 
-	gases = []
-	for g in data.get("gas", []):
-		gases.append(GasConfig(
-			id            = g["id"],
-			name          = g["name"],
-			molar_mass    = g["molar_mass"],
-			gamma         = g["gamma"],
-			coolprop_name = g.get("coolprop_name"),
-			z_factor      = g.get("z_factor", 1.0),
-			t_crit_k      = g.get("t_crit_k"),
-			p_crit_pa     = g.get("p_crit_pa"),
-			acentric      = g.get("acentric", 0.0),
-		))
+	gases = tuple(
+		build_section(GasConfig, g, "gas") for g in data.get("gas", [])
+	)
 
-	return FluidsConfig(gases=tuple(gases))
+	return FluidsConfig(gases=gases)
+#endregion

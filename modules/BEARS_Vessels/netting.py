@@ -1,8 +1,3 @@
-#region Imports
-from math import pi, cos, tan, radians
-import numpy as np
-#endregion
-
 #region Clairaut
 def clairaut_angle_trig(r_boss: float, r_out: float) -> tuple[float, float]:
 	sin_a = r_boss / r_out

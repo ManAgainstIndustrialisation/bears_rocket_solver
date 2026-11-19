@@ -4,11 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..BEARS_Materials.material import Material
-from .dome import (
-	DomeGeometry,
-	IsotensoidDome,
-	SphericalDome,
-)
+from .dome import DomeGeometry, SphericalDome
 from .netting import (
 	clairaut_angle_trig,
 	size_composite_layer,

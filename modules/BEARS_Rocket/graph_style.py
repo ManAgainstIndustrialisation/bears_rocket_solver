@@ -18,18 +18,26 @@ def has_graphviz() -> bool:
 #region Graph Stylizer
 def style_graph(
 	dot         : Any,
-	rankdir     : str = "LR",
-	splines     : str = "ortho",
+	rankdir     : str  = "LR",
+	splines     : str  = "ortho",
 	concentrate : bool = True,
-	dpi         : int = 300,
+	detailed    : bool = False,
+	dpi         : int  = 300,
 ) -> Any:
-	"""Apply presentation styling and clean routing to a pydot graph."""
+	"""
+	Apply presentation styling and clean routing to a pydot graph
+
+	`detailed` additionally applies the (experimental) fonts and color scheme
+	"""
 
 	dot.set_rankdir(rankdir)
 	dot.set("splines",     splines)
 	dot.set("concentrate", "true" if concentrate else "false")
 
-	return dot
+	if not detailed:
+		return dot
+
+	import pydot
 
 	dot.set("dpi",         str(dpi))
 	dot.set("fontname",    "Iosevka")

@@ -1,9 +1,11 @@
 #region Imports
+from typing       import Callable, Literal, NamedTuple
 from openmdao.api import Problem
 
-from typing import Callable, Literal, NamedTuple
-from scipy.constants import g
+from ..Config import CONSTANTS
 #endregion
+
+g = CONSTANTS.universal.standard_gravity # Standard gravity [m/s^2]
 
 #region Types
 class CheckResult(NamedTuple):
@@ -64,8 +66,8 @@ def check_mass_balance(prob: Problem) -> tuple[CheckResult, ...]:
 		return (CheckResult(
 			"error",
 			f"Mass balance mismatch: {mi:.3f} kg != {mcalc:.3f} kg"
-		))
-	
+		),)
+
 	return ()
 
 def check_target_apogee(prob: Problem) -> tuple[CheckResult, ...]:
@@ -111,7 +113,7 @@ def check_igniter_margin(prob: Problem) -> tuple[CheckResult, ...]:
 			"warning",
 			f"Igniter thermal margin ({margin:.1f}x) below 2.0x threshold"
 		),)
-	
+
 	return ()
 
 def check_igniter_port_clearance(prob: Problem) -> tuple[CheckResult, ...]:
@@ -121,7 +123,7 @@ def check_igniter_port_clearance(prob: Problem) -> tuple[CheckResult, ...]:
 			"warning",
 			f"Igniter port blockage ({blockage * 100:.1f}%) exceeds 20%"
 		),)
-	
+
 	return ()
 #endregion
 
@@ -153,14 +155,14 @@ def check_teststand_thrust(prob: Problem) -> tuple[CheckResult, ...]:
 	if thrust <= 0.0:
 		return (CheckResult(
 			"error",
-			f"Thrust non-positive ({res['thrust_N']:.3f} N)"
+			f"Thrust non-positive ({thrust:.3f} N)"
 		),)
 
 	return ()
 
 def check_supply_pressure_hierarchy(prob: Problem) -> tuple[CheckResult, ...]:
-	pt2 = prob.get_val("Sensors.PT2_run_tank_pressure", units="bar")[0]
-	pt4 = 200.0
+	pt2 = prob.get_val("Sensors.PT2_run_tank_pressure",  units="bar")[0]
+	pt4 = prob.get_val("Sensors.PT4_N2_supply_pressure", units="bar")[0]
 
 	if pt4 < pt2:
 		return (CheckResult(
@@ -185,7 +187,7 @@ def check_flame_temperature(prob: Problem) -> tuple[CheckResult, ...]:
 	if not (1500.0 <= tc <= 4000.0):
 		return (CheckResult(
 			"warning",
-			f"TC3 flame temp ({tc:.3f} K) outside range [1500, 4000]"
+			f"Flame temperature ({tc:.3f} K) outside range [1500, 4000]"
 		),)
 
 	return ()
@@ -211,17 +213,13 @@ DEFAULT_TESTSTAND_CHECKS: tuple[CheckFn, ...] = (
 )
 
 def run_checks(
-	res            : dict,
+	prob           : Problem,
 	checks         : tuple[CheckFn, ...],
 	raise_on_error : bool = True,
 ) -> tuple[CheckResult, ...]:
 	results: list[CheckResult] = []
 	for check in checks:
-		out = check(res)
-		if isinstance(out, CheckResult):
-			results.append(out)
-		elif out:
-			results.extend(out)
+		results.extend(check(prob))
 
 	errors   = [r.message for r in results if r.severity == "error"]
 	warnings = [r.message for r in results if r.severity == "warning"]

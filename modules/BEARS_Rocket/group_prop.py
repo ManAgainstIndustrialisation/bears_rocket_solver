@@ -1,24 +1,24 @@
-# region Imports
-import openmdao.api as om
-
+#region Imports
 from openmdao.api import Group
 
-from ..BEARS_Chem import BEARS_Chem
+from ..BEARS_Chem      import BEARS_Chem
+from ..BEARS_Materials import Gas
+from ..BEARS_Vessels   import LayeredWall
 
 from .comp_split      import PropellantSplitComponent
 from .comp_tank_oxy   import OxidizerTankComponent
 from .comp_tank_press import PressurantTankComponent
 from .group_engine    import HybridEngineGroup
-# endregion
+#endregion
 
 class PropulsionGroup(Group):
 
 	def initialize(self):
 		self.options.declare("chem", types=BEARS_Chem)
 
-		self.options.declare("ox_wall_material",    default=None)
-		self.options.declare("press_wall_material", default=None)
-		self.options.declare("press_gas",           default=None)
+		self.options.declare("ox_wall_material",    types=LayeredWall)
+		self.options.declare("press_wall_material", types=LayeredWall)
+		self.options.declare("press_gas",           types=Gas)
 		self.options.declare("press_thermo_model",  default=None, allow_none=True)
 
 	def setup(self):
@@ -53,9 +53,7 @@ class PropulsionGroup(Group):
 				("p_tank_max",    "tank_pressure"),
 				("diam_out",      "tank_diam"),
 				("ullage_frac",   "tank_ullage_frac"),
-				("sigma_y",       "tank_yield_factor"),
 				("safety_factor", "tank_safety_factor"),
-				("rho_wall",      "tank_wall_density"),
 				("r_boss",        "tank_boss_opening"),
 				("boss_len_fwd",  "tank_boss_len_fwd"),
 				("boss_len_aft",  "tank_boss_len_aft"),
@@ -70,23 +68,23 @@ class PropulsionGroup(Group):
 			],
 		)
 
-		press_opts = {"wall_material": press_wall, "thermo_model": press_thm}
-		if press_gas is not None:
-			press_opts["gas"] = press_gas
-
 		self.add_subsystem(
 			"PressurantTank",
-			PressurantTankComponent(**press_opts),
+			PressurantTankComponent(
+				wall_material = press_wall,
+				gas           = press_gas,
+				thermo_model  = press_thm,
+			),
 			promotes_inputs=[
 				("p_tank_max",    "press_pressure"),
 				("diam_out",      "press_diam"),
-				("sigma_y",       "press_yield_factor"),
 				("safety_factor", "press_safety_factor"),
-				("rho_wall",      "press_wall_density"),
 				("r_boss",        "press_boss_opening"),
 				("boss_len_fwd",  "press_boss_len_fwd"),
 				("boss_len_aft",  "press_boss_len_aft"),
 				("p_reg_margin",  "press_reg_margin"),
+				("t_ambient",     "press_ambient_temp"),
+				("p_sat",         "tank_vapor_pressure"),
 			],
 			promotes_outputs=[
 				("m_tank_dry", "press_dry_mass"),

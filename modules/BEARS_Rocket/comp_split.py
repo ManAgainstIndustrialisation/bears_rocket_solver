@@ -1,6 +1,6 @@
-# region Imports
+#region Imports
 from openmdao.api import ExplicitComponent
-# endregion
+#endregion
 
 class PropellantSplitComponent(ExplicitComponent):
 

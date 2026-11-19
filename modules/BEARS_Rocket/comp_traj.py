@@ -1,16 +1,16 @@
-# region Imports
+#region Imports
 import numpy as np
 
-from numpy.typing      import NDArray
-from scipy.integrate   import solve_ivp
-from scipy.interpolate import interp1d
-from scipy.constants   import g
-from openmdao.api      import ExplicitComponent
+from scipy.integrate import solve_ivp
+from openmdao.api    import ExplicitComponent
 
 from ..BEARS_Atmo import BEARS_Atm
-# endregion
+from ..Config     import CONSTANTS
+#endregion
 
-# region Ballistic functions
+g = CONSTANTS.universal.standard_gravity # Standard gravity [m/s^2]
+
+#region Ballistic functions
 def F_d(v: float, diam: float, rho: float, a: float) -> float:
 	"""Drag force calculator"""
 
@@ -105,63 +105,7 @@ def ballistic_apogee(
 
 	apogee = sol_coast.y[0][-1]
 	return t_burn, apogee
-
-def ballistic_apogee_var(
-	time_steps     : NDArray,
-	thrust_profile : NDArray,
-	isp_profile    : NDArray,
-	m_i            : float,
-	m_dry          : float,
-) -> float:
-	"""
-	A more complicated ballistic function that calculates the trajectory apogee
-	based on a variable thrust and Isp profile, passed in as an array of
-	measured values relative to the time series
-	"""
-
-	f_thrust = interp1d(
-		time_steps, thrust_profile, bounds_error=False, fill_value=0.0
-	)
-
-	f_isp = interp1d(
-		time_steps, isp_profile, bounds_error=False, fill_value=0.0
-	)
-
-	def dynamics(t, y):
-		h, v, m = y
-
-		thrust = f_thrust(t)
-		isp = f_isp(t)
-
-		if isp > 0 and m > m_dry:
-			mdot = thrust / (isp * g)
-		else:
-			mdot = 0
-			thrust = 0.0
-
-		dh_dt = v
-		dv_dt = (thrust / m) - g
-		dm_dt = -mdot
-
-		return [dh_dt, dv_dt, dm_dt]
-
-	def apogee_event(t, y): return y[1]
-	apogee_event.terminal = True
-	apogee_event.direction = -1
-
-	sol = solve_ivp(
-		dynamics,
-		t_span=(0, 1000),
-		y0=[0.0, 0.0, m_i],
-		method="RK45",
-		rtol=1e-7,
-		atol=1e-9,
-		events=apogee_event,
-	)
-
-	apogee = sol.y[0][-1]
-	return apogee
-# endregion
+#endregion
 
 class TrajectoryComponent(ExplicitComponent):
 
@@ -169,14 +113,6 @@ class TrajectoryComponent(ExplicitComponent):
 		self.options.declare("atm", types=BEARS_Atm)
 
 	def setup(self):
-		# t = np.linspace(0, 10, 1000)
-		# thrust_profile = np.where((t < 5.0), 1200, 0)
-		# isp_profile = np.where((t < 5.0), 180, 0)
-
-		# self.add_input('time_steps',     val=t,              units='s')
-		# self.add_input('thrust_profile', val=thrust_profile, units='N')
-		# self.add_input('isp_profile',    val=isp_profile,    units='s')
-
 		# Propulsion profile
 		self.add_input("thrust",          val=1000.0, units="N")
 		self.add_input("isp",             val=200.0,  units="s")

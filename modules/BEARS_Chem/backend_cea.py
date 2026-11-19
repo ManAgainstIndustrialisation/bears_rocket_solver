@@ -3,7 +3,7 @@ import numpy as np
 
 from typing          import TYPE_CHECKING
 from .helpers        import to_cea_reactant
-from scipy.constants import g
+from ..Config        import CONSTANTS
 
 if TYPE_CHECKING: from .reac import Reactant
 #endregion
@@ -75,15 +75,16 @@ class CEABackend:
 		return float(self._solution.T[0])
 
 	def get_isp(
-		self, pc_pa: float, mr: float, eps: float, p_amb_pa: float = 101325.0
+		self, pc_pa: float, mr: float, eps: float, p_amb_pa: float = CONSTANTS.atmosphere.sea_level_pressure
 	) -> float:
 		self._solve(pc_pa, mr, eps=eps)
 
+		g0      = CONSTANTS.universal.standard_gravity
 		cstar   = float(self._solution.c_star[0])
-		isp_vac = float(self._solution.Isp_vacuum[-1]) / g
+		isp_vac = float(self._solution.Isp_vacuum[-1]) / g0
 
 		if p_amb_pa > 0.0:
-			return isp_vac - (p_amb_pa * eps * cstar) / (pc_pa * g)
+			return isp_vac - (p_amb_pa * eps * cstar) / (pc_pa * g0)
 
 		return isp_vac
 

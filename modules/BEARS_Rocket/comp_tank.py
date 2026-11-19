@@ -1,28 +1,21 @@
-# region Imports
+#region Imports
 import numpy as np
 
 from math         import pi
 from openmdao.api import ExplicitComponent
 
-from ..BEARS_Materials import AL_6061_T6
-from ..BEARS_Vessels   import (
-	Layer,
+from ..BEARS_Vessels import (
 	LayeredWall,
 	DomeGeometry,
 	IsotensoidDome,
-	SphericalDome,
 	tank_internal_volume,
 )
-# endregion
+#endregion
 
 class TankComponent(ExplicitComponent):
 
 	def initialize(self):
-		self.options.declare(
-			"wall_material",
-			default = None,
-			types   = (LayeredWall, type(None)),
-		)
+		self.options.declare("wall_material", types=LayeredWall)
 		self.options.declare(
 			"dome_geometry",
 			default = None,
@@ -38,14 +31,12 @@ class TankComponent(ExplicitComponent):
 		self.setup_fluid_inputs()
 
 		wall = self.options["wall_material"]
-		n_layers = len(wall.layers) if wall else 1
+		n_layers = len(wall.layers)
 
 		self.add_input("p_tank_max",    val=70e5,   units="Pa")
 		self.add_input("diam_out",      val=0.15,   units="m")
 
 		self.add_input("safety_factor", val=1.5)
-		self.add_input("sigma_y",       val=276e6,  units="Pa")
-		self.add_input("rho_wall",      val=2700.0, units="kg/m**3")
 		self.add_input("r_boss",        val=0.02,   units="m")
 		self.add_input("boss_len_fwd",  val=0.015,  units="m")
 		self.add_input("boss_len_aft",  val=0.015,  units="m")
@@ -67,32 +58,24 @@ class TankComponent(ExplicitComponent):
 	def setup_partials(self):
 		self.declare_partials("*", "*", method="cs")
 
-	def get_fluid_mass(self, inputs):
-		return inputs["m_fluid"]
-
-	def get_fluid_density(self, inputs):
-		return inputs["rho_fluid"]
-
-	def get_ullage_frac(self, inputs):
-		return inputs["ullage_frac"]
+	def fluid_state(self, inputs):
+		"""Return the stored fluid `(mass, density, ullage fraction)`"""
+		return inputs["m_fluid"], inputs["rho_fluid"], inputs["ullage_frac"]
 
 	def compute(self, inputs, outputs):
-		m_fluid = self.get_fluid_mass(inputs)
-		rho_f   = self.get_fluid_density(inputs)
-		uf      = self.get_ullage_frac(inputs)
+		self.size_tank(inputs, outputs, *self.fluid_state(inputs))
 
-		p_max   = inputs["p_tank_max"][0]
-		d_out   = inputs["diam_out"][0]
-		sigma_y = inputs["sigma_y"][0]
-		sf      = inputs["safety_factor"][0]
-		rho_w   = inputs["rho_wall"][0]
+	def size_tank(self, inputs, outputs, m_fluid, rho_f, uf):
+		"""Size the tank wall and geometry around the given fluid state"""
+		p_max = inputs["p_tank_max"][0]
+		d_out = inputs["diam_out"][0]
+		sf    = inputs["safety_factor"][0]
 
 		r_boss = inputs["r_boss"][0]
 		bfwd   = inputs["boss_len_fwd"][0]
 		baft   = inputs["boss_len_aft"][0]
 
 		wall = self.options["wall_material"]
-		if wall is None: wall = LayeredWall(Layer(AL_6061_T6))
 
 		dome = self.options["dome_geometry"]
 		if dome is None: dome = IsotensoidDome()

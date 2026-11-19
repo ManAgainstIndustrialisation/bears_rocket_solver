@@ -2,7 +2,6 @@
 from dataclasses import dataclass
 from typing import Sequence
 from openmdao.api import Problem
-import openmdao.api as om
 #endregion
 
 #region Data structures

@@ -1,5 +1,7 @@
 #region Imports
 from dataclasses import dataclass, field
+
+from .constants import CONSTANTS
 #endregion
 
 #region Design
@@ -16,18 +18,16 @@ class TankConfig:
 	pressure_bar            : float # [bar]
 	diam_m                  : float # [m]
 	safety_factor           : float
-	yield_factor_pa         : float # [Pa]
-	wall_density_kgm3       : float # [kg/m^3]
 	ullage_fraction         : float = 0.0
 	boss_opening_m          : float = 0.02  # [m]
 	boss_length_fwd_m       : float = 0.015 # [m]
 	boss_length_aft_m       : float = 0.015 # [m]
+	vapor_pressure_bar      : float | None = None # Stored liquid Psat [bar]
 	reg_margin_bar          : float = 20.0  # [bar]
 	ambient_temp_c          : float = 30.0  # [deg C]
 
 @dataclass(frozen=True)
 class InjectorConfig:
-	area_m2                 : float # [m^2]
 	cd                      : float
 
 @dataclass(frozen=True)
@@ -47,7 +47,6 @@ class IgniterConfig:
 
 @dataclass(frozen=True)
 class NozzleConfig:
-	throat_area_m2          : float # [m^2]
 	expansion_ratio         : float
 	length_m                : float # [m]
 
@@ -67,11 +66,11 @@ class OptimizationSeedConfig:
 
 @dataclass(frozen=True)
 class EfficienciesConfig:
-	combustion              : float
-	trajectory              : float
-	propellant_utilization  : float
-	regression_correction   : float
-	nozzle_friction         : float
+	combustion              : float = 0.88
+	trajectory              : float = 0.92
+	propellant_utilization  : float = 0.92
+	regression_correction   : float = 0.60
+	nozzle_friction         : float = 0.95
 #endregion
 
 #region Chemistry
@@ -80,39 +79,17 @@ class SpeciesConfig:
 	name                    : str
 	formula_parts           : tuple[dict[str, float], ...] = ()
 	mass_fraction           : float = 100.0
-	temperature_k           : float = 298.15
+	temperature_k           : float = CONSTANTS.reference.temperature
 	enthalpy                : float | None = None
 	enthalpy_units          : str   | None = None
 	density                 : float | None = None
 	density_units           : str   | None = None
 	role                    : str   | None = None
 
-	def get_density_si(self) -> float:
-		if self.density is None:
-			return 1000.0
-
-		if self.density_units in ("g/cm^3", "g/cc", "g/cm3"):
-			return self.density * 1000.0
-
-		return self.density
-
 @dataclass(frozen=True)
 class BipropellantConfig:
 	fuels                   : tuple[SpeciesConfig, ...]
 	oxidizers               : tuple[SpeciesConfig, ...]
-
-@dataclass(frozen=True)
-class MonopropellantConfig:
-	species                 : tuple[SpeciesConfig, ...]
-
-@dataclass(frozen=True)
-class WorkingFluidConfig:
-	species                 : tuple[SpeciesConfig, ...]
-
-# Type alias for one of the above
-PropellantConfig = (
-	BipropellantConfig | MonopropellantConfig | WorkingFluidConfig
-)
 #endregion
 
 #region Materials and Fluids
@@ -129,7 +106,7 @@ class MaterialConfig:
 class GasConfig:
 	id                      : str
 	name                    : str
-	molar_mass              : float
+	molar_mass              : float # [kg/kmol]
 	gamma                   : float
 	coolprop_name           : str   | None = None
 	z_factor                : float        = 1.0
@@ -139,7 +116,8 @@ class GasConfig:
 
 	@property
 	def r_specific(self) -> float:
-		return 8314.462618 / self.molar_mass
+		"""R / M [J/(kg*K)], with the molar mass converted to kg/mol"""
+		return CONSTANTS.universal.molar_gas_constant / (self.molar_mass * 1e-3)
 
 @dataclass(frozen=True)
 class LayerConfig:

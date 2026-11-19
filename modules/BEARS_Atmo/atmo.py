@@ -6,7 +6,7 @@ try:
 except ImportError:
 	isa = None
 
-from scipy.constants import g, R, zero_Celsius
+from ..Config import CONSTANTS
 #endregion
 
 def atm_isa(h):
@@ -23,16 +23,18 @@ def atm_standalone(h):
 	NOTE: AI-generated placeholder
 	"""
 
-	T0 = 15.0 + zero_Celsius
-	P0 = 101325.0
-	L  = 0.0065
-	M  = 0.0289644
-	gamma = 1.4
+	isa = CONSTANTS.atmosphere
+	air = CONSTANTS.air
+	g0  = CONSTANTS.universal.standard_gravity
 
-	T = np.maximum(T0 - L * h, 216.65)
-	P = P0 * (T / T0)**(g * M / (R * L))
-	rho = P / ((R / M) * T)
-	a = np.sqrt(gamma * (R / M) * T)
+	T0 = isa.sea_level_temperature
+	L  = isa.lapse_rate
+
+	T   = np.maximum(T0 - L * h, isa.tropopause_temperature)
+	R   = CONSTANTS.universal.molar_gas_constant
+	P   = isa.sea_level_pressure * (T / T0)**(g0 * air.molar_mass / (R * L))
+	rho = P / (air.r_specific * T)
+	a   = np.sqrt(air.gamma * air.r_specific * T)
 
 	return T, P, rho, a
 

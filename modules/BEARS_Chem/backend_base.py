@@ -1,5 +1,7 @@
 #region Imports
 from typing import Protocol, runtime_checkable
+
+from ..Config import CONSTANTS
 #endregion
 
 @runtime_checkable
@@ -17,6 +19,6 @@ class ThermochemistryBackend(Protocol):
 		pc_pa    : float,
 		mr       : float,
 		eps      : float,
-		p_amb_pa : float = 101325.0,
+		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
 	) -> float:
 		...

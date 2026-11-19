@@ -1,8 +1,8 @@
-# region Imports
+#region Imports
 from openmdao.api import ExplicitComponent
 
 from ..BEARS_Chem import BEARS_Chem
-# endregion
+#endregion
 
 class ChemComponent(ExplicitComponent):
 

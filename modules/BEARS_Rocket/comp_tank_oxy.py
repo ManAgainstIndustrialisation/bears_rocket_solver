@@ -1,22 +1,16 @@
-# region Imports
-import numpy as np
-
-from math       import pi
+#region Imports
 from .comp_tank import TankComponent
-# endregion
+#endregion
 
 class OxidizerTankComponent(TankComponent):
 
 	def initialize(self):
 		super().initialize()
-		self.options.declare("rho_ox", default=700.0, types=float)
-
-	def get_fluid_mass(self, inputs):
-		return inputs["m_oxy"]
-
-	def get_fluid_density(self, inputs):
-		return self.options["rho_ox"]
+		self.options.declare("rho_ox", types=float)
 
 	def setup_fluid_inputs(self):
 		self.add_input("m_oxy",       val=10.0, units="kg")
 		self.add_input("ullage_frac", val=0.01)
+
+	def fluid_state(self, inputs):
+		return inputs["m_oxy"], self.options["rho_ox"], inputs["ullage_frac"]

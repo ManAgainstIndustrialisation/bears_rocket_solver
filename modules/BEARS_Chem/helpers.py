@@ -1,6 +1,4 @@
 #region Imports
-from typing import Optional
-
 from .reac import Reactant
 #endregion
 
@@ -15,9 +13,7 @@ def reactant_card(
 	See <https://rocketcea.readthedocs.io/en/latest/std_examples.html>
 	"""
 
-	f = reactant.mass_fraction
-	if fraction:
-		f = fraction
+	f = reactant.mass_fraction if fraction is None else fraction
 
 	formula_comp = [
 		f"{atom} {float(count)}" for atom, count in reactant.formula.items()
@@ -67,7 +63,7 @@ def gencard(components: tuple[Reactant]) -> str:
 		cards = []
 		for comp in components:
 			wt = (comp.mass_fraction / wt_total) * 100.0
-			# NOTE: Compontent weights must add up to 100.0 for CEA
+			# NOTE: Component weights must add up to 100.0 for CEA
 
 			cards.append(reactant_card(comp, fraction=wt))
 
@@ -107,48 +103,3 @@ def to_cea_reactant(r: Reactant):
 		ret = cea.Reactant(name = r.name, temperature = r.temperature)
 
 	return ret
-
-def parse_reactants(data: dict[str, list[dict]]) -> tuple[str, str]:
-	"""
-	Parse a dictionary of fuel and oxidizer mixtures to the corresponding
-	reactant names
-
-	If a reactant or mixture does not exist in the RocketCEA propellant
-	database, it is created with the appropriate card
-
-	Returns the oxidizer and fuel names for passing to `CEA_Obj`
-	"""
-
-	from rocketcea.input_cards import oxCards, fuelCards
-	from rocketcea.cea_obj     import add_new_fuel, add_new_oxidizer
-
-	reac_cards = {"oxid": oxCards, "fuel": fuelCards}
-
-	rnames: dict[str, str] = {}
-	for rtype in ["oxid", "fuel"]:
-		if not all(r["reactype"] == rtype for r in data[rtype]):
-			raise ValueError(
-				"Can only generate a composite card "
-				+ "for reactants of the same type"
-			)
-
-		reactants = list(map(Reactant, data[rtype]))
-		rname = "_".join([reac.name for reac in reactants])
-
-		card = reac_cards[rtype]
-		if rname not in card:
-			card = gencard(reactants)
-			if rtype == "fuel": add_new_fuel(rname, card)
-			else: add_new_oxidizer(rname, card)
-
-		rnames[rtype] = rname
-
-	return rnames["oxid"], rnames["fuel"]
-
-def parse_densities(data: dict[str, list[dict]]) -> tuple[float, float]:
-	"""
-	Calculate effective bulk densities for oxidizer and fuel in kg/m^3.
-	"""
-	rs_ox = list(map(Reactant, data["oxid"]))
-	rs_fu = list(map(Reactant, data["fuel"]))
-	return bulk_density(rs_ox), bulk_density(rs_fu)

@@ -10,9 +10,9 @@ readme = "README.md"
 dependencies = [
 	"openmdao",
 	"cea",
+	"rocketcea",
 	"coolprop",
-	"isacalc",
-	"rocketpy"
+	"isacalc"
 ]
 authors = [
 	{ name = "Andrii Kozytskyi", email = "kozytskyi.andrii.d@gmail.com" }
@@ -28,7 +28,7 @@ verification = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["packages*"]
+include = ["modules*"]
 
 [tool.distutils.egg_info]
 egg_base = "build"

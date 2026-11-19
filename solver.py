@@ -7,9 +7,9 @@ The rocket optimization script using OpenMDAO for the framework
 """
 
 #region Imports
+import argparse
 import os
-import numpy        as np
-import openmdao.api as om
+import numpy as np
 
 import openmdao.utils.variable_table as vt
 import openmdao.core.system          as sys_mod
@@ -74,6 +74,14 @@ def patch_variable_table():
 
 #region Main
 def main():
+	parser = argparse.ArgumentParser(description=__doc__)
+	parser.add_argument(
+		"--sweep",
+		action = "store_true",
+		help   = "run an airframe diameter parameter sweep after the solve",
+	)
+	args = parser.parse_args()
+
 	patch_variable_table()
 
 	#region Working directories
@@ -147,8 +155,9 @@ def main():
 
 	#region Test stand
 	prob_stand = TestStandProblem(
-		chem    = chem,
-		reports = False,
+		chem          = chem,
+		run_tank_wall = walls["run_tank"],
+		reports       = False,
 	)
 
 	prob_stand.setup()
@@ -166,13 +175,12 @@ def main():
 	#endregion
 
 	#region Diameter sweep
-	diams = [0.125, 0.140, 0.150, 0.160, 0.170]
+	if args.sweep:
+		diams = [0.125, 0.140, 0.150, 0.160, 0.170]
 
-	return
-
-	sweep_results = sweep_diameters(prob_rocket, diams)
-	print("\n Diameter parameter sweep:")
-	print(format_sweep_org_table(sweep_results))
+		sweep_results = sweep_diameters(prob_rocket, diams)
+		print("\nDiameter parameter sweep:")
+		print(format_sweep_org_table(sweep_results))
 	#endregion
 #endregion
 

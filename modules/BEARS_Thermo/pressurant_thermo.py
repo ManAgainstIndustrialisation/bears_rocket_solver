@@ -45,7 +45,7 @@ def _pos_pad(p_ox, p_sat):
 #region Models
 @dataclass(frozen=True)
 class IdealGasBlowdown:
-	"""Isentropic idea-gas blowdown with fixed bottle Z"""
+	"""Isentropic ideal-gas blowdown with fixed bottle Z"""
 	safety_factor         : float = 1.10
 	supports_complex_step : bool  = True
 

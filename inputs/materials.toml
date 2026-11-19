@@ -11,7 +11,7 @@ modulus_units     = "GPa"
 
 [[material]]
 id                = "CFRP_T700"
-name              = "T7000 Carbon Fiber / Epoxy"
+name              = "T700 Carbon Fiber / Epoxy"
 density           = 1550.0
 density_units     = "kg/m^3"
 yield_strength    = 1800.0
@@ -19,6 +19,13 @@ ultimate_strength = 2100.0
 strength_units    = "MPa"
 elastic_modulus   = 135.0
 modulus_units     = "GPa"
+
+[[wall]]
+id = "run_tank"
+
+  # Facility run tank, sized to its working pressure
+  [[wall.layers]]
+  material = "AL_6061_T6"
 
 [[wall]]
 id = "copv_press"

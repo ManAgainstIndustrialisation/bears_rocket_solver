@@ -1,15 +1,14 @@
-# region Imports
+#region Imports
 import os
 
 from pathlib import Path
-from typing  import Any
 
-from ..Config import BipropellantConfig
+from ..Config import BipropellantConfig, CONSTANTS
 
 from .reac         import Reactant
 from .helpers      import bulk_density
 from .backend_base import ThermochemistryBackend
-# endregion
+#endregion
 
 class BEARS_Chem:
 	"""Unified thermochemistry evaluation interface for OpenMDAO"""
@@ -23,12 +22,6 @@ class BEARS_Chem:
 		self._backend = backend
 		self.rho_ox   = rho_ox
 		self.rho_fuel = rho_fuel
-
-	@property
-	def _cea(self) -> Any:
-		if hasattr(self._backend, "_cea"):
-			return self._backend._cea
-		return self._backend
 
 	@classmethod
 	def set_work_dir(cls, path: str | Path):
@@ -68,9 +61,7 @@ class BEARS_Chem:
 				engine = CEABackend(ox_reactants, fuel_reactants)
 			case "rocketcea":
 				from .backend_rocketcea import RocketCEABackend
-				engine = RocketCEABackend(
-					ox_reactants, fuel_reactants, work_dir
-				)
+				engine = RocketCEABackend(ox_reactants, fuel_reactants)
 			case _:
 				raise ValueError(f"Unknown chemistry backend: '{backend}'")
 
@@ -87,6 +78,6 @@ class BEARS_Chem:
 		pc_pa    : float,
 		mr       : float,
 		eps      : float,
-		p_amb_pa : float = 101325.0,
+		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
 	) -> float:
 		return self._backend.get_isp(pc_pa, mr, eps, p_amb_pa)

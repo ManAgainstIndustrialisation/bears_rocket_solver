@@ -1,4 +1,4 @@
-# region Imports
+#region Imports
 import openmdao.api as om
 
 from openmdao.api import Group
@@ -10,7 +10,7 @@ from .comp_fuel     import FuelComponent
 #from .comp_igniter  import IgniterComponent
 from .comp_chem     import ChemComponent
 from .comp_nozzle   import NozzleComponent
-# endregion
+#endregion
 
 class HybridEngineGroup(Group):
 

@@ -1,7 +1,6 @@
-# region Imports
-from typing import override
+#region Imports
 from openmdao.api import ExplicitComponent
-# endregion
+#endregion
 
 class MassComponent(ExplicitComponent):
 

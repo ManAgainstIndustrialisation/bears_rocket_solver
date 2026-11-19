@@ -1,13 +1,15 @@
-# region Imports
+#region Imports
 from openmdao.api import Group, IndepVarComp
 
-from ..BEARS_Chem import BEARS_Chem
-from ..BEARS_Atmo import BEARS_Atm
+from ..BEARS_Chem      import BEARS_Chem
+from ..BEARS_Atmo      import BEARS_Atm
+from ..BEARS_Materials import Gas
+from ..BEARS_Vessels   import LayeredWall
 
 from .group_prop import PropulsionGroup
 from .comp_mass  import MassComponent
 from .comp_traj  import TrajectoryComponent
-# endregion
+#endregion
 
 class RocketGroup(Group):
 
@@ -15,12 +17,9 @@ class RocketGroup(Group):
 		self.options.declare("chem", types=BEARS_Chem)
 		self.options.declare("atm",  types=BEARS_Atm)
 
-		self.options.declare("rho_ox",   default=700.0, types=float)
-		self.options.declare("rho_fuel", default=900.0, types=float)
-
-		self.options.declare("ox_wall_material",    default=None)
-		self.options.declare("press_wall_material", default=None)
-		self.options.declare("press_gas",           default=None)
+		self.options.declare("ox_wall_material",    types=LayeredWall)
+		self.options.declare("press_wall_material", types=LayeredWall)
+		self.options.declare("press_gas",           types=Gas)
 		self.options.declare("press_thermo_model",  default=None)
 
 	def setup(self):
@@ -55,22 +54,20 @@ class RocketGroup(Group):
 		ivc.add_output("tank_diam",              val=0.15,   units="m")
 		ivc.add_output("tank_safety_factor",     val=2.0)
 		ivc.add_output("tank_ullage_fraction",   val=0.1)
-		ivc.add_output("tank_yield_factor",      val=276e6,  units="Pa")
-		ivc.add_output("tank_wall_density",      val=2700.0, units="kg/m**3")
 		ivc.add_output("tank_boss_opening",      val=0.02,   units="m")
 		ivc.add_output("tank_boss_len_fwd",      val=0.015,  units="m")
 		ivc.add_output("tank_boss_len_aft",      val=0.019,  units="m")
+		ivc.add_output("tank_vapor_pressure",    val=60.0,   units="bar")
 
 		# - Pressurant tank
 		ivc.add_output("press_pressure",         val=200,    units="bar")
 		ivc.add_output("press_diam",             val=0.15,   units="m")
 		ivc.add_output("press_safety_factor",    val=2.0)
-		ivc.add_output("press_yield_factor",     val=276e6,  units="Pa")
-		ivc.add_output("press_wall_density",     val=2700.0, units="kg/m**3")
 		ivc.add_output("press_boss_opening",     val=0.02,   units="m")
 		ivc.add_output("press_boss_len_fwd",     val=0.015,  units="m")
 		ivc.add_output("press_boss_len_aft",     val=0.015,  units="m")
 		ivc.add_output("press_reg_margin",       val=20,     units="bar")
+		ivc.add_output("press_ambient_temp",     val=30.0,   units="degC")
 
 		# - Injector
 		ivc.add_output("injector_area",          val=4.5e-5, units="m**2")
@@ -131,22 +128,20 @@ class RocketGroup(Group):
 		self.connect("DesignVars.tank_diam",               "Propulsion.tank_diam")
 		self.connect("DesignVars.tank_safety_factor",      "Propulsion.tank_safety_factor")
 		self.connect("DesignVars.tank_ullage_fraction",    "Propulsion.tank_ullage_frac")
-		self.connect("DesignVars.tank_yield_factor",       "Propulsion.tank_yield_factor")
-		self.connect("DesignVars.tank_wall_density",       "Propulsion.tank_wall_density")
 		self.connect("DesignVars.tank_boss_opening",       "Propulsion.tank_boss_opening")
 		self.connect("DesignVars.tank_boss_len_fwd",       "Propulsion.tank_boss_len_fwd")
 		self.connect("DesignVars.tank_boss_len_aft",       "Propulsion.tank_boss_len_aft")
+		self.connect("DesignVars.tank_vapor_pressure",     "Propulsion.tank_vapor_pressure")
 
 		# - Pressurant tank
 		self.connect("DesignVars.press_pressure",          "Propulsion.press_pressure")
 		self.connect("DesignVars.press_diam",              "Propulsion.press_diam")
 		self.connect("DesignVars.press_safety_factor",     "Propulsion.press_safety_factor")
-		self.connect("DesignVars.press_yield_factor",      "Propulsion.press_yield_factor")
-		self.connect("DesignVars.press_wall_density",      "Propulsion.press_wall_density")
 		self.connect("DesignVars.press_boss_opening",      "Propulsion.press_boss_opening")
 		self.connect("DesignVars.press_boss_len_fwd",      "Propulsion.press_boss_len_fwd")
 		self.connect("DesignVars.press_boss_len_aft",      "Propulsion.press_boss_len_aft")
 		self.connect("DesignVars.press_reg_margin",        "Propulsion.press_reg_margin")
+		self.connect("DesignVars.press_ambient_temp",      "Propulsion.press_ambient_temp")
 
 		# - Fuel
 		self.connect("DesignVars.fuel_port_diam",          "Propulsion.fuel_port_diam")

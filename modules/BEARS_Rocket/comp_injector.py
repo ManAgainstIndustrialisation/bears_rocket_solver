@@ -15,7 +15,7 @@ class InjectorComponent(ExplicitComponent):
 		self.add_input("p_chamber", val=20e5,   units="Pa")
 		self.add_input("a_inj",     val=4.5e-5, units="m**2")
 
-		# Discharge coefficient (efficiency) TODO
+		# Discharge coefficient (efficiency)
 		self.add_input("cd", val=0.7)
 
 		self.add_output("mdot_ox", val=1.0,  units="kg/s")
