@@ -188,27 +188,6 @@ class ConstraintsConfig:
 		require_positive(self, "max_burn_time_s", "min_injector_pressure_drop_bar")
 
 @dataclass(frozen=True)
-class ChecksConfig:
-	min_injector_pressure_drop_ratio : float  # Warn below this injector pressure drop over chamber pressure [-]
-	min_liftoff_twr                  : float  # Fail below this liftoff thrust-to-weight ratio [-]
-	low_liftoff_twr                  : float  # Warn below this liftoff thrust-to-weight ratio [-]
-	min_isp_s                        : float  # Warn below this delivered Isp [s]
-	max_isp_s                        : float  # Warn above this delivered Isp [s]
-	min_flame_temperature_k          : float  # Warn below this chamber temperature [K]
-	max_flame_temperature_k          : float  # Warn above this chamber temperature [K]
-	apogee_tolerance_m               : float  # Fail when the apogee misses its target by more [m]
-	target_tolerance                 : float  # Fail when thrust or chamber pressure misses its target by more, relative [-]
-
-	def __post_init__(self):
-		require_positive(
-			self, "min_injector_pressure_drop_ratio", "min_liftoff_twr", "min_isp_s",
-			"min_flame_temperature_k", "apogee_tolerance_m", "target_tolerance",
-		)
-		require(self.low_liftoff_twr >= self.min_liftoff_twr,         "[checks] low_liftoff_twr must be >= min_liftoff_twr")
-		require(self.max_isp_s > self.min_isp_s,                      "[checks] max_isp_s must exceed min_isp_s")
-		require(self.max_flame_temperature_k > self.min_flame_temperature_k, "[checks] max_flame_temperature_k must exceed min_flame_temperature_k")
-
-@dataclass(frozen=True)
 class SweepConfig:
 	outer_diameters_m : tuple[float, ...]  # Outer airframe diameters to re-optimize at with --sweep [m]
 
@@ -230,7 +209,6 @@ class RocketConfig:
 	cfg_efficiencies : EfficienciesConfig    # [efficiencies]
 	cfg_optim        : OptimizationConfig    # [optimization]
 	cfg_constraints  : ConstraintsConfig     # [constraints]
-	cfg_checks       : ChecksConfig          # [checks]
 	cfg_sweep        : SweepConfig           # [sweep]
 
 	def __post_init__(self):
@@ -284,7 +262,6 @@ SECTIONS = {
 	"cfg_efficiencies" : ("efficiencies",     EfficienciesConfig),
 	"cfg_optim"        : ("optimization",     OptimizationConfig),
 	"cfg_constraints"  : ("constraints",      ConstraintsConfig),
-	"cfg_checks"       : ("checks",           ChecksConfig),
 	"cfg_sweep"        : ("sweep",            SweepConfig),
 }
 

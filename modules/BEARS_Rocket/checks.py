@@ -1,8 +1,8 @@
 """
 Acceptance checks of the optimized rocket
 
-Each check reads the run results and the limits under [checks] in the rocket
-inputs, and returns its findings. Errors stop the run, warnings are printed
+Each check reads the run results and the limits from the checks file, and
+returns its findings. Errors stop the run, warnings are printed
 """
 
 #region Imports
@@ -30,13 +30,13 @@ def check_injector_pressure_drop(prob: Problem) -> tuple[CheckResult, ...]:
 
 	if dp <= 0.0:
 		return (CheckResult("error", f"Injector ΔP non-positive ({dp:.3f} bar)"),)
-	if dp / pc < prob.cfg.cfg_checks.min_injector_pressure_drop_ratio:
+	if dp / pc < prob.limits.min_injector_pressure_drop_ratio:
 		return (CheckResult("warning", f"Injector ΔP ratio low ({dp / pc:.1%})"),)
 	return ()
 
 def check_liftoff_twr(prob: Problem) -> tuple[CheckResult, ...]:
 	"""The rocket has to leave the rail with a thrust-to-weight margin"""
-	limits = prob.cfg.cfg_checks
+	limits = prob.limits
 	thr = prob.get_val("Propulsion.prop_thrust", units="N")[0]
 	mi  = prob.get_val("Mass.initial_mass",      units="kg")[0]
 	twr = thr / (mi * g)
@@ -62,7 +62,7 @@ def check_fuel_grain_diameter(prob: Problem) -> tuple[CheckResult, ...]:
 
 def check_engine_targets(prob: Problem) -> tuple[CheckResult, ...]:
 	"""The optimized engine has to deliver the target thrust and chamber pressure"""
-	tolerance = prob.cfg.cfg_checks.target_tolerance
+	tolerance = prob.limits.target_tolerance
 	targets = (
 		("Thrust",           "Propulsion.prop_thrust",           "DesignVars.g_target_thrust",           "N"),
 		("Chamber pressure", "Propulsion.prop_chamber_pressure", "DesignVars.g_target_chamber_pressure", "bar"),
@@ -86,13 +86,13 @@ def check_target_apogee(prob: Problem) -> tuple[CheckResult, ...]:
 	eta_t  = prob.get_val("EfficiencyVars.eta_trajectory")[0]
 
 	err = abs(ap * eta_t - target)
-	if err > prob.cfg.cfg_checks.apogee_tolerance_m:
+	if err > prob.limits.apogee_tolerance_m:
 		return (CheckResult("error", f"Apogee target error is {err:.2f} m"),)
 	return ()
 
 def check_combustion_isp(prob: Problem) -> tuple[CheckResult, ...]:
 	"""The delivered Isp has to be plausible for a hybrid"""
-	limits = prob.cfg.cfg_checks
+	limits = prob.limits
 	isp = prob.get_val("Propulsion.prop_isp", units="s")[0]
 
 	if not (limits.min_isp_s <= isp <= limits.max_isp_s):
@@ -104,7 +104,7 @@ def check_combustion_isp(prob: Problem) -> tuple[CheckResult, ...]:
 
 def check_flame_temperature(prob: Problem) -> tuple[CheckResult, ...]:
 	"""The chamber temperature has to be plausible for the propellants"""
-	limits = prob.cfg.cfg_checks
+	limits = prob.limits
 	tc = prob.get_val("Propulsion.prop_chamber_temp", units="K")[0]
 
 	if not (limits.min_flame_temperature_k <= tc <= limits.max_flame_temperature_k):

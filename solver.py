@@ -14,7 +14,7 @@ import numpy as np
 import openmdao.utils.variable_table as vt
 import openmdao.core.system          as sys_mod
 
-from modules.Config       import load_rocket_inputs, load_materials
+from modules.Config       import load_rocket_inputs, load_materials, load_checks
 from modules.BEARS_Atmo   import BEARS_Atm
 from modules.BEARS_Chem   import BEARS_Chem
 from modules.BEARS_Thermo import create_pressurant_thermo
@@ -85,6 +85,7 @@ def main():
 	#region Inputs and models
 	cfg = load_rocket_inputs("inputs/rocket_inputs.toml")
 	mat = load_materials("inputs/materials.toml")
+	lim = load_checks("inputs/checks.toml")
 
 	models = cfg.cfg_models
 	ox     = cfg.cfg_oxy_tank
@@ -94,6 +95,7 @@ def main():
 	#region Rocket optimization
 	prob = RocketLaunchProblem(
 		cfg          = cfg,
+		limits       = lim,
 		atm          = BEARS_Atm(models.atmosphere, mat.air),
 		chem         = BEARS_Chem(mat.propellants, models.chemistry),
 		ox_wall      = mat.wall(ox.wall),

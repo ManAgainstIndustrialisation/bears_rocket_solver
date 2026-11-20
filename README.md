@@ -52,9 +52,10 @@ Results are printed to the terminal, all model variables are written to
 
 | File | Contents |
 | ---- | -------- |
-| `inputs/rocket_inputs.toml` | Design inputs: targets, airframe diameters, drag curve, tanks with their wall and gas choice, injector, fuel, nozzle, model choices, efficiencies, optimizer start values and bounds, constraint limits, acceptance checks and the diameter sweep |
+| `inputs/rocket_inputs.toml` | Design inputs: targets, airframe diameters, drag curve, tanks with their wall and gas choice, injector, fuel, nozzle, model choices, efficiencies, optimizer start values and bounds, constraint limits, and the diameter sweep |
+| `inputs/checks.toml` | Acceptance limits the optimized rocket is checked against after every run |
 | `inputs/materials.toml` | Material properties: air, structural materials, tank wall layups, pressurant gases, propellant reactants |
-| `inputs/constants.toml` | Physical constants: universal constants, thermochemical reference state, standard atmosphere |
+| `inputs/constants.toml` | Physical constants: universal constants, standard atmosphere |
 
 The tanks are structural and use the outer airframe diameter. The engine sits
 inside the airframe and has to fit the inner diameter.

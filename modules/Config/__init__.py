@@ -14,6 +14,8 @@ from .materials import (
 	load_materials,
 )
 
+from .checks import ChecksConfig, load_checks
+
 from .rocket import (
 	AerodynamicsConfig,
 	RocketConfig,

@@ -6,7 +6,7 @@ from openmdao.api import Problem
 from ..BEARS_Atmo   import BEARS_Atm
 from ..BEARS_Chem   import BEARS_Chem
 from ..BEARS_Thermo import PressurantThermoModel
-from ..Config       import CONSTANTS, RocketConfig, Gas, Wall
+from ..Config       import CONSTANTS, RocketConfig, ChecksConfig, Gas, Wall
 
 from .group_rocket import RocketGroup
 from .reporting    import write_output_table, write_graphs
@@ -30,6 +30,7 @@ class RocketLaunchProblem(Problem):
 	def __init__(
 		self,
 		cfg          : RocketConfig,           # Rocket design inputs
+		limits       : ChecksConfig,           # Acceptance limits for the checks
 		atm          : BEARS_Atm,              # Atmosphere model
 		chem         : BEARS_Chem,             # Chemistry of the propellant combination
 		ox_wall      : Wall,                   # Oxidizer tank wall layup
@@ -50,7 +51,8 @@ class RocketLaunchProblem(Problem):
 			),
 			**kwargs,
 		)
-		self.cfg = cfg
+		self.cfg    = cfg
+		self.limits = limits
 
 		self.driver = om.ScipyOptimizeDriver()
 		self.driver.options["optimizer"] = "SLSQP"
