@@ -1,5 +1,5 @@
 #region Imports
-from openmdao.api import Group, IndepVarComp
+from openmdao.api import Group, IndepVarComp, ExecComp
 
 from ..BEARS_Chem      import BEARS_Chem
 from ..BEARS_Atmo      import BEARS_Atm
@@ -43,19 +43,17 @@ class RocketGroup(Group):
 		ivc.add_output("g_target_thrust",           val=3000.0, units="N")
 		ivc.add_output("g_target_chamber_pressure", val=30.0,   units="bar")
 
-		# Airframe diameters: the tanks fit the bore, the skin sets the drag
+		# Airframe diameters: the tanks are structural and form the skin, so
+		# they take the outer diameter, which also sets the drag. The engine
+		# is not structural and sits inside the bore, the inner diameter
 		ivc.add_output("g_inner_diameter",       val=0.12,   units="m")
 		ivc.add_output("g_outer_diameter",       val=0.125,  units="m")
-
-		# Clearance for component mounting
-		ivc.add_output("g_clearance",            val=0.002,  units="m")
 
 		# - Oxidizer tank
 		# NOTE: the tank component expects pressure in SI Pa units,
 		#       here we specify the pressure in units of bar used by the team
 		#       and let MDAO convert automatically on component interface
 		ivc.add_output("tank_pressure",          val=70,     units="bar")
-		ivc.add_output("tank_diam",              val=0.15,   units="m")
 		ivc.add_output("tank_safety_factor",     val=2.0)
 		ivc.add_output("tank_ullage_fraction",   val=0.1)
 		ivc.add_output("tank_boss_opening",      val=0.02,   units="m")
@@ -65,7 +63,6 @@ class RocketGroup(Group):
 
 		# - Pressurant tank
 		ivc.add_output("press_pressure",         val=200,    units="bar")
-		ivc.add_output("press_diam",             val=0.15,   units="m")
 		ivc.add_output("press_safety_factor",    val=2.0)
 		ivc.add_output("press_boss_opening",     val=0.02,   units="m")
 		ivc.add_output("press_boss_len_fwd",     val=0.015,  units="m")
@@ -117,6 +114,17 @@ class RocketGroup(Group):
 
 		self.add_subsystem("Mass", MassComponent())
 
+		# Radial room left between the fuel grain and the airframe bore
+		self.add_subsystem(
+			"EngineFit",
+			ExecComp(
+				"grain_margin = d_inner - d_grain",
+				grain_margin = {"val": 0.05, "units": "m"},
+				d_inner      = {"val": 0.12, "units": "m"},
+				d_grain      = {"val": 0.07, "units": "m"},
+			),
+		)
+
 		self.add_subsystem(
 			"Trajectory",
 			TrajectoryComponent(atm=atm, aero=self.options["cfg_aero"]),
@@ -127,7 +135,7 @@ class RocketGroup(Group):
 		#region Connections
 		# - Oxidizer tank
 		self.connect("DesignVars.tank_pressure",           "Propulsion.tank_pressure")
-		self.connect("DesignVars.tank_diam",               "Propulsion.tank_diam")
+		self.connect("DesignVars.g_outer_diameter",        "Propulsion.tank_diam")
 		self.connect("DesignVars.tank_safety_factor",      "Propulsion.tank_safety_factor")
 		self.connect("DesignVars.tank_ullage_fraction",    "Propulsion.tank_ullage_frac")
 		self.connect("DesignVars.tank_boss_opening",       "Propulsion.tank_boss_opening")
@@ -137,7 +145,7 @@ class RocketGroup(Group):
 
 		# - Pressurant tank
 		self.connect("DesignVars.press_pressure",          "Propulsion.press_pressure")
-		self.connect("DesignVars.press_diam",              "Propulsion.press_diam")
+		self.connect("DesignVars.g_outer_diameter",        "Propulsion.press_diam")
 		self.connect("DesignVars.press_safety_factor",     "Propulsion.press_safety_factor")
 		self.connect("DesignVars.press_boss_opening",      "Propulsion.press_boss_opening")
 		self.connect("DesignVars.press_boss_len_fwd",      "Propulsion.press_boss_len_fwd")
@@ -157,6 +165,10 @@ class RocketGroup(Group):
 		# - Nozzle
 		self.connect("DesignVars.nozzle_exit_diam",        "Propulsion.nozzle_exit_diam")
 		self.connect("DesignVars.conical_nozzle_half_angle", "Propulsion.conical_nozzle_half_angle")
+
+		# - Engine fit
+		self.connect("DesignVars.g_inner_diameter",        "EngineFit.d_inner")
+		self.connect("Propulsion.fuel_grain_diam",         "EngineFit.d_grain")
 
 		# - Mass
 		self.connect("DesignVars.g_non_propulsion_mass",   "Mass.non_propulsion_mass")

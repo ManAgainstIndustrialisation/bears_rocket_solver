@@ -92,24 +92,6 @@ def validate_rocket_config(cfg: RocketConfig) -> None:
 			f"global.outer_rocket_diameter_m ({gl.outer_rocket_diameter_m} m)"
 		)
 
-	if gl.clearance_m < 0:
-		errors.append(f"global.clearance_m must be >= 0 (got {gl.clearance_m})")
-
-	# The tanks sit inside the airframe bore
-	if ox.diam_m + 2 * gl.clearance_m > gl.inner_rocket_diameter_m:
-		errors.append(
-			f"oxidizer_tank diameter ({ox.diam_m} m)"
-			f" + clearance ({2 * gl.clearance_m} m) "
-			f"exceeds inner airframe diameter ({gl.inner_rocket_diameter_m} m)"
-		)
-
-	if pr.diam_m + 2 * gl.clearance_m > gl.inner_rocket_diameter_m:
-		errors.append(
-			f"pressurizer_tank diameter ({pr.diam_m} m)"
-			f" + clearance ({2 * gl.clearance_m} m) "
-			f"exceeds inner airframe diameter ({gl.inner_rocket_diameter_m} m)"
-		)
-
 	# Drag table
 	aero = cfg.cfg_aero
 	if not aero.drag_mach or len(aero.drag_mach) != len(aero.drag_cd):

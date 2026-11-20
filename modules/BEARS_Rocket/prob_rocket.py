@@ -160,6 +160,14 @@ class RocketLaunchProblem(Problem):
 			units  = "bar",
 		)
 
+		# The fuel grain has to fit inside the airframe bore
+		self.model.add_constraint(
+			"EngineFit.grain_margin",
+			lower = 0.0,
+			ref   = 0.01,
+			units = "m",
+		)
+
 		# Injector pressure drop safety margin
 		self.model.add_constraint(
 			"Propulsion.injector_delta_p",
@@ -194,14 +202,12 @@ class RocketLaunchProblem(Problem):
 		self.set_val("DesignVars.g_target_chamber_pressure", gl.target_chamber_pressure_bar, units="bar")
 		self.set_val("DesignVars.g_inner_diameter",          gl.inner_rocket_diameter_m,     units="m")
 		self.set_val("DesignVars.g_outer_diameter",          gl.outer_rocket_diameter_m,     units="m")
-		self.set_val("DesignVars.g_clearance",               gl.clearance_m,                 units="m")
 
 		# The non-propulsion mass is given for the configured airframe
 		self.set_val("Mass.ref_diameter", gl.outer_rocket_diameter_m, units="m")
 
 		# Oxidizer tank
 		self.set_val("DesignVars.tank_pressure",        ox.pressure_bar,      units="bar")
-		self.set_val("DesignVars.tank_diam",            ox.diam_m,            units="m")
 		self.set_val("DesignVars.tank_safety_factor",   ox.safety_factor)
 		self.set_val("DesignVars.tank_ullage_fraction", ox.ullage_fraction)
 		self.set_val("DesignVars.tank_boss_opening",    ox.boss_opening_m,    units="m")
@@ -211,7 +217,6 @@ class RocketLaunchProblem(Problem):
 
 		# Pressurant tank
 		self.set_val("DesignVars.press_pressure",       pr.pressure_bar,      units="bar")
-		self.set_val("DesignVars.press_diam",           pr.diam_m,            units="m")
 		self.set_val("DesignVars.press_safety_factor",  pr.safety_factor)
 		self.set_val("DesignVars.press_boss_opening",   pr.boss_opening_m,    units="m")
 		self.set_val("DesignVars.press_boss_len_fwd",   pr.boss_length_fwd_m, units="m")

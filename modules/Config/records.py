@@ -11,9 +11,8 @@ class GlobalConfig:
 	target_altitude_m           : float # [m]
 	target_thrust_N             : float # [N]
 	target_chamber_pressure_bar : float # [bar]
-	inner_rocket_diameter_m     : float # Airframe bore, holds the tanks [m]
-	outer_rocket_diameter_m     : float # Airframe skin, sets the drag area [m]
-	clearance_m                 : float # [m]
+	inner_rocket_diameter_m     : float # Airframe bore, holds the engine [m]
+	outer_rocket_diameter_m     : float # Airframe skin, the tank diameter and drag area [m]
 
 @dataclass(frozen=True)
 class AerodynamicsConfig:
@@ -23,7 +22,6 @@ class AerodynamicsConfig:
 @dataclass(frozen=True)
 class TankConfig:
 	pressure_bar            : float # [bar]
-	diam_m                  : float # [m]
 	safety_factor           : float
 	ullage_fraction         : float = 0.0
 	boss_opening_m          : float = 0.02  # [m]

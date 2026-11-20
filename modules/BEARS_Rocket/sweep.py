@@ -27,23 +27,19 @@ def sweep_diameters(
 ) -> list[DiameterSweepPoint]:
 	"""
 	Re-optimize over a range of outer airframe diameters. The airframe wall
-	thickness is held at its configured value, so the bore and the tanks grow
-	with the outer diameter
+	thickness is held at its configured value, so the bore grows with the
+	outer diameter. The tanks take the outer diameter
 	"""
 	results = []
-	clearance = prob.get_val("DesignVars.g_clearance", units="m")[0]
 	d_inner_0 = prob.get_val("DesignVars.g_inner_diameter", units="m")[0]
 	d_outer_0 = prob.get_val("DesignVars.g_outer_diameter", units="m")[0]
 	wall      = d_outer_0 - d_inner_0
 
 	for d in diameters_m:
 		d_inner = d - wall
-		d_tank  = d_inner - 2.0 * clearance
 
 		prob.set_val("DesignVars.g_outer_diameter", d,       units="m")
 		prob.set_val("DesignVars.g_inner_diameter", d_inner, units="m")
-		prob.set_val("DesignVars.tank_diam",        d_tank,  units="m")
-		prob.set_val("DesignVars.press_diam",       d_tank,  units="m")
 
 		if quiet: prob.driver.opt_settings["disp"] = False
 

@@ -3,9 +3,8 @@ non_propulsion_mass_kg      = 8.0    # Everything but the propulsion system, pay
 target_altitude_m           = 3000.0
 target_thrust_N             = 3000.0
 target_chamber_pressure_bar = 30.0
-inner_rocket_diameter_m     = 0.12   # Airframe bore, the tanks fit inside it
-outer_rocket_diameter_m     = 0.125  # Airframe skin, sets the drag area
-clearance_m                 = 0.0    # Radial gap between the bore and the tanks
+inner_rocket_diameter_m     = 0.12   # Airframe bore, the engine has to fit inside it
+outer_rocket_diameter_m     = 0.125  # Airframe skin, sets the drag area. The tanks are structural and use it
 
 [aerodynamics]
 # Vehicle drag coefficient against Mach number. Linearly interpolated, and
@@ -15,7 +14,6 @@ drag_cd   = [0.48, 0.85, 0.65]
 
 [oxidizer_tank]
 pressure_bar            = 70.0
-diam_m                  = 0.12
 safety_factor           = 3.0
 ullage_fraction         = 0.1
 boss_opening_m          = 0.02
@@ -24,7 +22,6 @@ boss_length_aft_m       = 0.019
 
 [pressurizer_tank]
 pressure_bar            = 200.0
-diam_m                  = 0.12
 safety_factor           = 3.0
 boss_opening_m          = 0.02
 boss_length_fwd_m       = 0.015

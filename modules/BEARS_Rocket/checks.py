@@ -55,14 +55,29 @@ def check_liftoff_twr(prob: Problem) -> tuple[CheckResult, ...]:
 	return tuple(issues)
 
 def check_nozzle_exit_diameter(prob: Problem) -> tuple[CheckResult, ...]:
+	"""The nozzle is part of the engine, so it has to fit the airframe bore"""
 	d_exit = prob.get_val("DesignVars.nozzle_exit_diam", units="m")[0]
-	d_body = prob.get_val("DesignVars.g_outer_diameter", units="m")[0]
+	d_bore = prob.get_val("DesignVars.g_inner_diameter", units="m")[0]
 
-	if d_exit > d_body:
+	if d_exit > d_bore:
 		return (CheckResult(
 			"warning",
 			f"Nozzle exit diameter ({d_exit * 1e3:.1f} mm) is larger than the "
-			f"rocket outer diameter ({d_body * 1e3:.1f} mm)"
+			f"rocket inner diameter ({d_bore * 1e3:.1f} mm)"
+		),)
+
+	return ()
+
+def check_fuel_grain_diameter(prob: Problem) -> tuple[CheckResult, ...]:
+	"""The fuel grain has to fit the airframe bore"""
+	d_grain = prob.get_val("Propulsion.fuel_grain_diam",  units="m")[0]
+	d_bore  = prob.get_val("DesignVars.g_inner_diameter", units="m")[0]
+
+	if d_grain > d_bore:
+		return (CheckResult(
+			"error",
+			f"Fuel grain diameter ({d_grain * 1e3:.1f} mm) is larger than the "
+			f"rocket inner diameter ({d_bore * 1e3:.1f} mm)"
 		),)
 
 	return ()
@@ -167,6 +182,7 @@ DEFAULT_ROCKET_CHECKS: tuple[CheckFn, ...] = (
 	check_injector_dp,
 	check_liftoff_twr,
 	check_nozzle_exit_diameter,
+	check_fuel_grain_diameter,
 	check_engine_targets,
 	check_mass_balance,
 	check_target_apogee,
