@@ -5,11 +5,12 @@ from openmdao.api import ExplicitComponent
 class MassComponent(ExplicitComponent):
 
 	def setup(self):
-		self.add_input("diameter",          val=0.125, units="m")
-		self.add_input("ref_diameter",      val=0.125, units="m")
-		self.add_input("payload_mass",      val=2.0,   units="kg")
-		self.add_input("nonprop_mass",      val=5.0,   units="kg")
-		self.add_input("propellant_mass",   val=10.0,  units="kg")
+		# The non-propulsion mass is given at `ref_diameter` and scales
+		# linearly with the airframe diameter, e.g. in a diameter sweep
+		self.add_input("diameter",            val=0.125, units="m")
+		self.add_input("ref_diameter",        val=0.125, units="m")
+		self.add_input("non_propulsion_mass", val=8.0,   units="kg")
+		self.add_input("propellant_mass",     val=10.0,  units="kg")
 		self.add_input("pressurant_mass",   val=0.5,   units="kg")
 
 		self.add_input("ox_tank_mass",      val=2.0,   units="kg")
@@ -30,13 +31,12 @@ class MassComponent(ExplicitComponent):
 		m_ox  = inputs["ox_tank_mass"]
 		m_pr  = inputs["press_tank_mass"]
 		m_mot = inputs["motor_dry_mass"]
-		m_np  = inputs["nonprop_mass"]
+		m_np  = inputs["non_propulsion_mass"]
 		d_1   = inputs["diameter"]
 		d_0   = inputs["ref_diameter"]
 
 		m_prop    = inputs["propellant_mass"]
 		m_press   = inputs["pressurant_mass"]
-		m_payload = inputs["payload_mass"]
 
 		m_nonprop = m_np * (d_1/d_0)
 		m_struct = (m_ox + m_pr + m_mot + m_nonprop)
@@ -45,7 +45,7 @@ class MassComponent(ExplicitComponent):
 		m_loaded   = m_prop / eta_prop
 		m_residual = m_loaded - m_prop
 
-		m_dry  = m_payload + m_struct + m_residual
+		m_dry  = m_struct + m_residual
 		m_init = m_dry + m_prop + m_press
 
 		outputs["structural_mass"]  = m_struct

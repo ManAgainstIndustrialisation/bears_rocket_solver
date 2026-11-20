@@ -6,7 +6,7 @@ try:
 except ImportError:
 	isa = None
 
-from ..Config import CONSTANTS
+from ..Config import CONSTANTS, AIR
 #endregion
 
 def atm_isa(h):
@@ -24,7 +24,7 @@ def atm_standalone(h):
 	"""
 
 	isa = CONSTANTS.atmosphere
-	air = CONSTANTS.air
+	air = AIR
 	g0  = CONSTANTS.universal.standard_gravity
 
 	T0 = isa.sea_level_temperature

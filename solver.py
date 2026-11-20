@@ -27,7 +27,6 @@ from modules.BEARS_Materials import Material, Gas
 from modules.BEARS_Vessels   import LayeredWall
 from modules.BEARS_Rocket    import (
 	RocketLaunchProblem,
-	TestStandProblem,
 	sweep_diameters,
 	format_sweep_org_table,
 )
@@ -91,8 +90,8 @@ def main():
 	#endregion
 
 	#region Inputs
-	cfg_rocket = load_configs("inputs/rocket.toml")
-	cfg_reac   = load_reactants("inputs/reactants.toml")
+	cfg_rocket = load_configs("inputs/rocket_inputs.toml")
+	cfg_reac   = load_reactants("inputs/materials.toml")
 
 	atm  = BEARS_Atm(cfg_rocket.cfg_models.atmosphere)
 	chem = BEARS_Chem.from_config(
@@ -100,7 +99,7 @@ def main():
 	)
 
 	cfg_mat    = load_materials("inputs/materials.toml")
-	cfg_fluids = load_fluids("inputs/fluids.toml")
+	cfg_fluids = load_fluids("inputs/materials.toml")
 
 	materials = {m.id: Material.from_config(m) for m in cfg_mat.materials}
 	gases     = {g.id: Gas.from_config(g) for g in cfg_fluids.gases}
@@ -127,51 +126,7 @@ def main():
 
 	prob_rocket.setup()
 	prob_rocket.run()
-
-	m_prop_opt = prob_rocket.get_val(
-		"OptimizationVars.o_propellant_mass", units="kg"
-	)[0]
-
-	mr_opt = prob_rocket.get_val(
-		"OptimizationVars.o_mixture_ratio"
-	)[0]
-
-	a_inj_opt = prob_rocket.get_val(
-		"OptimizationVars.o_injector_area", units="mm**2"
-	)[0]
-
-	a_throat_opt = prob_rocket.get_val(
-		"OptimizationVars.o_nozzle_throat_area", units="cm**2"
-	)[0]
-
-	eps_opt = prob_rocket.get_val(
-		"DesignVars.nozzle_expansion_ratio"
-	)[0]
-
 	prob_rocket.report()
-	#endregion
-
-	print("--------")
-
-	#region Test stand
-	prob_stand = TestStandProblem(
-		chem          = chem,
-		run_tank_wall = walls["run_tank"],
-		reports       = False,
-	)
-
-	prob_stand.setup()
-
-	prob_stand.set_opt_vars(
-		m_prop_kg       = m_prop_opt,
-		mr              = mr_opt,
-		a_inj_mm2       = a_inj_opt,
-		a_throat_cm2    = a_throat_opt,
-		expansion_ratio = eps_opt,
-	)
-
-	prob_stand.run()
-	prob_stand.report()
 	#endregion
 
 	#region Diameter sweep

@@ -9,7 +9,7 @@ from .comp_injector import InjectorComponent
 from .comp_fuel     import FuelComponent
 #from .comp_igniter  import IgniterComponent
 from .comp_chem     import ChemComponent
-from .comp_nozzle   import NozzleComponent
+from .comp_nozzle   import NozzleGeometryComponent, NozzleComponent
 #endregion
 
 class HybridEngineGroup(Group):
@@ -20,8 +20,9 @@ class HybridEngineGroup(Group):
 	def setup(self):
 		chem = self.options["chem"]
 
-		self.set_input_defaults("engine_feed_pressure",   val=60e5, units="Pa")
-		self.set_input_defaults("nozzle_expansion_ratio", val=5.0)
+		self.set_input_defaults("engine_feed_pressure",      val=60e5,   units="Pa")
+		self.set_input_defaults("nozzle_throat_area",        val=7.0e-4, units="m**2")
+		self.set_input_defaults("conical_nozzle_half_angle", val=15.0,   units="deg")
 
 		#region Subsystems
 		self.add_subsystem(
@@ -79,6 +80,22 @@ class HybridEngineGroup(Group):
 		)
 		"""
 
+		# Nozzle geometry: the fixed exit and free throat set the expansion ratio
+		self.add_subsystem(
+			"NozzleGeometry",
+			NozzleGeometryComponent(),
+			promotes_inputs=[
+				("d_exit",          "nozzle_exit_diam"),
+				("a_throat",        "nozzle_throat_area"),
+				("half_angle",      "conical_nozzle_half_angle"),
+			],
+			promotes_outputs=[
+				("a_exit",          "nozzle_exit_area"),
+				("expansion_ratio", "nozzle_expansion_ratio"),
+				("length",          "nozzle_length"),
+			],
+		)
+
 		# Combustion chemistry & flame temperature
 		self.add_subsystem(
 			"Chemistry",
@@ -90,12 +107,13 @@ class HybridEngineGroup(Group):
 			],
 			promotes_outputs=[
 				("isp",             "engine_chem_isp"),
-				("cstar",           "engine_cstar"),
 				("t_chamber",       "engine_chamber_temp"),
+				("gamma",           "engine_gamma"),
+				("molar_mass",      "engine_molar_mass"),
 			],
 		)
 
-		# Nozzle performance & chamber pressure
+		# Nozzle performance & chamber pressure (choked, sonic throat)
 		self.add_subsystem(
 			"Nozzle",
 			NozzleComponent(),
@@ -103,13 +121,20 @@ class HybridEngineGroup(Group):
 				("mixture_ratio",   "engine_mixture_ratio"),
 				("a_throat",        "nozzle_throat_area"),
 				("expansion_ratio", "nozzle_expansion_ratio"),
-				("length",          "nozzle_length"),
+				("half_angle",      "conical_nozzle_half_angle"),
 				("eta_friction",    "nozzle_eta_friction"),
+				("eta_cstar",       "chem_eta_cstar"),
 			],
 			promotes_outputs=[
+				("mach_throat",     "nozzle_throat_mach"),
+				("mach_exit",       "nozzle_exit_mach"),
+				("cstar",           "engine_cstar"),
 				("thrust",          "engine_thrust"),
 				("isp_delivered",   "engine_isp"),
 				("p_chamber",       "engine_chamber_pressure"),
+				("p_throat",        "nozzle_throat_pressure"),
+				("t_throat",        "nozzle_throat_temp"),
+				("p_exit",          "nozzle_exit_pressure"),
 				("mdot_prop",       "engine_mdot_prop"),
 				("eta_nozzle",      "nozzle_efficiency"),
 				("exit_half_angle", "nozzle_exit_half_angle"),
@@ -122,7 +147,9 @@ class HybridEngineGroup(Group):
 		self.connect("engine_chamber_pressure", "Chemistry.chamber_pressure")
 		self.connect("engine_mdot_ox",          "Fuel.mdot_ox")
 		self.connect("engine_mdot_ox",          "Nozzle.mdot_ox")
-		self.connect("engine_cstar",            "Nozzle.cstar")
+		self.connect("engine_chamber_temp",     "Nozzle.t_chamber")
+		self.connect("engine_gamma",            "Nozzle.gamma")
+		self.connect("engine_molar_mass",       "Nozzle.molar_mass")
 		self.connect("engine_chem_isp",         "Nozzle.isp")
 		#endregion
 

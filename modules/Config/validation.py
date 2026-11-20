@@ -1,4 +1,6 @@
 #region Imports
+from math import pi
+
 from .records import RocketConfig, BipropellantConfig, SpeciesConfig
 #endregion
 
@@ -24,6 +26,11 @@ def validate_species_config(
 
 	if sp.density is not None and sp.density <= 0:
 		errors.append(f"{prefix}density must be > 0 (got {sp.density})")
+
+	if sp.vapor_pressure_bar is not None and sp.vapor_pressure_bar <= 0:
+		errors.append(
+			f"{prefix}vapor_pressure_bar must be > 0 (got {sp.vapor_pressure_bar})"
+		)
 
 	return errors
 
@@ -53,31 +60,66 @@ def validate_rocket_config(cfg: RocketConfig) -> None:
 	ox = cfg.cfg_oxy_tank
 	pr = cfg.cfg_press_tank
 
-	if gl.diameter_m <= 0:
-		errors.append(f"global.diameter_m must be > 0 (got {gl.diameter_m})")
+	if gl.non_propulsion_mass_kg < 0:
+		errors.append(
+			f"global.non_propulsion_mass_kg must be >= 0 (got {gl.non_propulsion_mass_kg})"
+		)
+
+	if gl.target_thrust_N <= 0:
+		errors.append(f"global.target_thrust_N must be > 0 (got {gl.target_thrust_N})")
+
+	if gl.target_chamber_pressure_bar <= 0:
+		errors.append(
+			"global.target_chamber_pressure_bar must be > 0 "
+			f"(got {gl.target_chamber_pressure_bar})"
+		)
+
+	# The injector needs a positive pressure drop to feed the chamber
+	if gl.target_chamber_pressure_bar >= ox.pressure_bar:
+		errors.append(
+			f"global.target_chamber_pressure_bar ({gl.target_chamber_pressure_bar} bar) "
+			f"must be below oxidizer_tank.pressure_bar ({ox.pressure_bar} bar)"
+		)
+
+	if gl.inner_rocket_diameter_m <= 0:
+		errors.append(
+			f"global.inner_rocket_diameter_m must be > 0 (got {gl.inner_rocket_diameter_m})"
+		)
+
+	if gl.inner_rocket_diameter_m > gl.outer_rocket_diameter_m:
+		errors.append(
+			f"global.inner_rocket_diameter_m ({gl.inner_rocket_diameter_m} m) exceeds "
+			f"global.outer_rocket_diameter_m ({gl.outer_rocket_diameter_m} m)"
+		)
 
 	if gl.clearance_m < 0:
 		errors.append(f"global.clearance_m must be >= 0 (got {gl.clearance_m})")
 
-	if ox.diam_m + 2 * gl.clearance_m > gl.diameter_m:
+	# The tanks sit inside the airframe bore
+	if ox.diam_m + 2 * gl.clearance_m > gl.inner_rocket_diameter_m:
 		errors.append(
 			f"oxidizer_tank diameter ({ox.diam_m} m)"
 			f" + clearance ({2 * gl.clearance_m} m) "
-			f"exceeds airframe diameter ({gl.diameter_m} m)"
+			f"exceeds inner airframe diameter ({gl.inner_rocket_diameter_m} m)"
 		)
 
-	if pr.diam_m + 2 * gl.clearance_m > gl.diameter_m:
+	if pr.diam_m + 2 * gl.clearance_m > gl.inner_rocket_diameter_m:
 		errors.append(
 			f"pressurizer_tank diameter ({pr.diam_m} m)"
 			f" + clearance ({2 * gl.clearance_m} m) "
-			f"exceeds airframe diameter ({gl.diameter_m} m)"
+			f"exceeds inner airframe diameter ({gl.inner_rocket_diameter_m} m)"
 		)
 
-	if ox.vapor_pressure_bar is None or ox.vapor_pressure_bar <= 0:
-		errors.append(
-			"oxidizer_tank.vapor_pressure_bar must be set and > 0 "
-			f"(got {ox.vapor_pressure_bar})"
-		)
+	# Drag table
+	aero = cfg.cfg_aero
+	if not aero.drag_mach or len(aero.drag_mach) != len(aero.drag_cd):
+		errors.append("aerodynamics.drag_mach and drag_cd need the same, nonzero length")
+
+	if any(b <= a for a, b in zip(aero.drag_mach, aero.drag_mach[1:])):
+		errors.append("aerodynamics.drag_mach must be strictly increasing")
+
+	if any(cd < 0 for cd in aero.drag_cd):
+		errors.append("aerodynamics.drag_cd must be >= 0")
 
 	# Pressure hierarchy
 	if pr.pressure_bar <= ox.pressure_bar:
@@ -103,11 +145,27 @@ def validate_rocket_config(cfg: RocketConfig) -> None:
 	if not (0.0 < inj.cd <= 1.0):
 		errors.append("injector.cd must be in (0.0, 1.0]")
 
-	if nz.expansion_ratio <= 1.0 or nz.length_m <= 0:
-		errors.append("invalid nozzle expansion ratio or length")
+	if nz.nozzle_exit_diameter_m <= 0:
+		errors.append(
+			f"nozzle.nozzle_exit_diameter_m must be > 0 (got {nz.nozzle_exit_diameter_m})"
+		)
+
+	if not (0.0 < nz.conical_nozzle_half_angle_deg < 90.0):
+		errors.append(
+			"nozzle.conical_nozzle_half_angle_deg must be in (0, 90) "
+			f"(got {nz.conical_nozzle_half_angle_deg})"
+		)
 
 	if op.injector_area_m2 <= 0 or op.nozzle_throat_area_m2 <= 0:
 		errors.append("optimization seed areas must be > 0")
+
+	# The expansion ratio A_exit / A_throat must exceed 1 at the seed
+	a_exit = pi / 4.0 * nz.nozzle_exit_diameter_m**2
+	if op.nozzle_throat_area_m2 >= a_exit:
+		errors.append(
+			f"optimization.nozzle_throat_area_m2 ({op.nozzle_throat_area_m2:g} m^2) "
+			f"must be below the nozzle exit area ({a_exit:g} m^2)"
+		)
 
 	model_choices = {
 		"atmosphere"        : ("auto", "isacalc", "standalone"),

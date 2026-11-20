@@ -7,7 +7,6 @@ if TYPE_CHECKING: from .reac import Reactant
 #endregion
 
 PA_TO_PSIA = 1.450377e-4 # 1 Pa = 1.45038e-4 psia
-FTS_TO_MS  = 0.3048      # 1 ft/s = 0.3048 m/s
 
 class RocketCEABackend:
 	"""RocketCEA backend wrapping Fortran CEA2"""
@@ -33,8 +32,10 @@ class RocketCEABackend:
 
 		self._cea = CEA_Obj(oxName=rnames["oxid"], fuelName=rnames["fuel"])
 
-	def get_cstar(self, pc_pa: float, mr: float) -> float:
-		return self._cea.get_Cstar(Pc=pc_pa * PA_TO_PSIA, MR=mr) * FTS_TO_MS
+	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
+		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
+		mw, gamma = self._cea.get_Chamber_MolWt_gamma(Pc=pc_pa * PA_TO_PSIA, MR=mr)
+		return float(mw), float(gamma)
 
 	def get_tcomb(self, pc_pa: float, mr: float) -> float:
 		return self._cea.get_Tcomb(Pc=pc_pa * PA_TO_PSIA, MR=mr) * (5.0 / 9.0)

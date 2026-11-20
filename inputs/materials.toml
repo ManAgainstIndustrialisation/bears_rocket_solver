@@ -1,3 +1,24 @@
+# Material properties
+#
+# Every material, fluid and reactant property used by the solver is defined
+# here and nowhere else in the code. Physical constants live in constants.toml,
+# design inputs in rocket_inputs.toml
+#
+# Values are in SI units unless a key or a *_units entry says otherwise
+
+# ============================================================================
+# Air
+# ============================================================================
+
+[air]
+# Dry air, treated as a calorically perfect ideal gas
+molar_mass = 0.0289644  # [kg/mol]
+gamma      = 1.4        # Ratio of specific heats cp / cv
+
+# ============================================================================
+# Structural materials
+# ============================================================================
+
 [[material]]
 id                = "AL_6061_T6"
 name              = "Aluminum 6061-T6"
@@ -20,12 +41,8 @@ strength_units    = "MPa"
 elastic_modulus   = 135.0
 modulus_units     = "GPa"
 
-[[wall]]
-id = "run_tank"
-
-  # Facility run tank, sized to its working pressure
-  [[wall.layers]]
-  material = "AL_6061_T6"
+# Tank wall layups, built from the materials above. A layer without
+# thickness_m is sized to the tank pressure
 
 [[wall]]
 id = "copv_press"
@@ -52,3 +69,65 @@ id = "copv_ox"
   helical_angle_deg = 20.0
   efficiency        = 0.85
   fiber_volume_frac = 0.72
+
+# ============================================================================
+# Pressurant gases
+# ============================================================================
+
+[[gas]]
+id            = "N2"
+name          = "Nitrogen Gas"
+coolprop_name = "N2"
+molar_mass    = 28.0134  # [kg/kmol]
+gamma         = 1.40
+z_factor      = 1.15
+t_crit_k      = 126.192
+p_crit_pa     = 33.958e5
+acentric      = 0.0372
+
+[[gas]]
+id            = "He"
+name          = "Helium Gas"
+coolprop_name = "He"
+molar_mass    = 4.0026   # [kg/kmol]
+gamma         = 1.667
+z_factor      = 1.05
+t_crit_k      = 5.1953
+p_crit_pa     = 2.2746e5
+acentric      = -0.390
+
+# ============================================================================
+# Propellant reactants
+# ============================================================================
+
+[[fuel]]
+name           = "Paraffin"
+mass_fraction  = 5.0
+formula_parts  = [{ C = 25, H = 52 }]
+temperature_k  = 298.15
+enthalpy       = -1438.2
+enthalpy_units = "kj/mol"
+density        = 0.9
+density_units  = "g/cm^3"
+
+[[fuel]]
+name           = "ABS"
+mass_fraction  = 1.0
+formula_parts  = [
+	{ C = 8, H = 8 },
+	{ C = 4, H = 6 },
+	{ C = 3, H = 3, N = 1 }
+]
+temperature_k  = 298.15
+enthalpy       = 66.9
+enthalpy_units = "kj/mol"
+density        = 1.05
+density_units  = "g/cm^3"
+
+[[oxid]]
+name               = "N2O"
+formula_parts      = [{ N = 2, O = 1 }]
+temperature_k      = 298.15
+density            = 0.6881
+density_units      = "g/cm^3"
+vapor_pressure_bar = 63.08  # Saturation pressure at 30 degC, the pressurant ambient_temp_c

@@ -54,6 +54,39 @@ def check_liftoff_twr(prob: Problem) -> tuple[CheckResult, ...]:
 
 	return tuple(issues)
 
+def check_nozzle_exit_diameter(prob: Problem) -> tuple[CheckResult, ...]:
+	d_exit = prob.get_val("DesignVars.nozzle_exit_diam", units="m")[0]
+	d_body = prob.get_val("DesignVars.g_outer_diameter", units="m")[0]
+
+	if d_exit > d_body:
+		return (CheckResult(
+			"warning",
+			f"Nozzle exit diameter ({d_exit * 1e3:.1f} mm) is larger than the "
+			f"rocket outer diameter ({d_body * 1e3:.1f} mm)"
+		),)
+
+	return ()
+
+def check_engine_targets(prob: Problem) -> tuple[CheckResult, ...]:
+	"""The optimized engine must deliver the target thrust and chamber pressure"""
+	issues: list[CheckResult] = []
+
+	targets = (
+		("Thrust",           "Propulsion.prop_thrust",           "DesignVars.g_target_thrust",           "N"),
+		("Chamber pressure", "Propulsion.prop_chamber_pressure", "DesignVars.g_target_chamber_pressure", "bar"),
+	)
+
+	for label, name, target_name, units in targets:
+		val    = prob.get_val(name,        units=units)[0]
+		target = prob.get_val(target_name, units=units)[0]
+		if abs(val - target) > 1e-2 * target:
+			issues.append(CheckResult(
+				"error",
+				f"{label} ({val:.3f} {units}) misses its target ({target:.3f} {units})"
+			))
+
+	return tuple(issues)
+
 def check_mass_balance(prob: Problem) -> tuple[CheckResult, ...]:
 	mi    = prob.get_val("Mass.initial_mass",                  units="kg")[0]
 	mdry  = prob.get_val("Mass.dry_mass",                      units="kg")[0]
@@ -87,16 +120,7 @@ def check_target_apogee(prob: Problem) -> tuple[CheckResult, ...]:
 	return ()
 
 def check_combustion_isp(prob: Problem) -> tuple[CheckResult, ...]:
-	from .prob_rocket    import RocketLaunchProblem
-	from .prob_teststand import TestStandProblem
-
-	match prob:
-		case RocketLaunchProblem():
-			isp = prob.get_val("Propulsion.prop_isp", units="s")[0]
-		case TestStandProblem():
-			isp = prob.get_val("test_isp", units="s")[0]
-		case _:
-			raise TypeError(f"Unsupported problem: {type(prob).__name__}")
+	isp = prob.get_val("Propulsion.prop_isp", units="s")[0]
 
 	if not (150.0 <= isp <= 350.0):
 		return (CheckResult(
@@ -125,64 +149,9 @@ def check_igniter_port_clearance(prob: Problem) -> tuple[CheckResult, ...]:
 		),)
 
 	return ()
-#endregion
-
-#region Test Stand Checks
-def check_feed_dp(prob: Problem) -> tuple[CheckResult, ...]:
-	issues: list[CheckResult] = []
-	pt2 = prob.get_val("Sensors.PT2_run_tank_pressure", units="bar")[0]
-	pt3 = prob.get_val("test_chamber_pressure_PT3",     units="bar")[0]
-
-	dp = pt2 - pt3
-
-	if dp <= 0.0:
-		issues.append(CheckResult(
-			"error",
-			f"Feed ΔP non-positive ({dp:.3f} bar)"
-		))
-	elif dp / pt3 < 0.15:
-		ratio = dp / pt3
-		issues.append(CheckResult(
-			"warning",
-			f"Feed ΔP ratio is low ({ratio:.1%})"
-		))
-
-	return tuple(issues)
-
-def check_teststand_thrust(prob: Problem) -> tuple[CheckResult, ...]:
-	thrust = prob.get_val("test_thrust", units="N")[0]
-
-	if thrust <= 0.0:
-		return (CheckResult(
-			"error",
-			f"Thrust non-positive ({thrust:.3f} N)"
-		),)
-
-	return ()
-
-def check_supply_pressure_hierarchy(prob: Problem) -> tuple[CheckResult, ...]:
-	pt2 = prob.get_val("Sensors.PT2_run_tank_pressure",  units="bar")[0]
-	pt4 = prob.get_val("Sensors.PT4_N2_supply_pressure", units="bar")[0]
-
-	if pt4 < pt2:
-		return (CheckResult(
-			"error",
-			"N2 supply pressure PT4 is below run tank pressure PT2"
-		),)
-
-	return ()
 
 def check_flame_temperature(prob: Problem) -> tuple[CheckResult, ...]:
-	from .prob_rocket    import RocketLaunchProblem
-	from .prob_teststand import TestStandProblem
-
-	match prob:
-		case RocketLaunchProblem():
-			tc = prob.get_val("Propulsion.prop_chamber_temp", units="K")[0]
-		case TestStandProblem():
-			tc = prob.get_val("test_chamber_temp_TC3", units="K")[0]
-		case _:
-			raise TypeError(f"Unsupported problem: {type(prob).__name__}")
+	tc = prob.get_val("Propulsion.prop_chamber_temp", units="K")[0]
 
 	if not (1500.0 <= tc <= 4000.0):
 		return (CheckResult(
@@ -197,19 +166,14 @@ def check_flame_temperature(prob: Problem) -> tuple[CheckResult, ...]:
 DEFAULT_ROCKET_CHECKS: tuple[CheckFn, ...] = (
 	check_injector_dp,
 	check_liftoff_twr,
+	check_nozzle_exit_diameter,
+	check_engine_targets,
 	check_mass_balance,
 	check_target_apogee,
 	check_combustion_isp,
 	#check_igniter_margin,
 	#check_igniter_port_clearance,
-)
-
-DEFAULT_TESTSTAND_CHECKS: tuple[CheckFn, ...] = (
-	check_feed_dp,
-	check_teststand_thrust,
-	check_combustion_isp,
-	check_supply_pressure_hierarchy,
-	check_flame_temperature,
+	#check_flame_temperature,
 )
 
 def run_checks(

@@ -5,6 +5,7 @@ from ..BEARS_Chem import BEARS_Chem
 #endregion
 
 class ChemComponent(ExplicitComponent):
+	"""Equilibrium chamber state and specific impulse from the chemistry backend"""
 
 	def initialize(self):
 		self.options.declare("chem", types=BEARS_Chem)
@@ -15,17 +16,21 @@ class ChemComponent(ExplicitComponent):
 		self.add_input("expansion_ratio",  val=5.0) # Expansion area ratio
 		self.add_input("eta_cstar",        val=1.0)
 
-		self.add_output("cstar",     val=1500.0, units="m/s") # Characteristic velocity
-		self.add_output("isp",       val=120.0,  units="s")
-		self.add_output("t_chamber", val=3000.0, units="K")
+		self.add_output("isp",        val=120.0,  units="s")
+		self.add_output("t_chamber",  val=3000.0, units="K")
+		self.add_output("gamma",      val=1.2)                   # Chamber cp / cv
+		self.add_output("molar_mass", val=25.0,   units="kg/kmol")
 
 	def setup_partials(self):
 		self.declare_partials(
-			["isp", "cstar", "t_chamber"],
+			["isp", "t_chamber", "gamma", "molar_mass"],
 			["chamber_pressure", "mixture_ratio"],
 			method="fd",
 			step=1e-4,
 		)
+
+		# Only the Isp depends on the expansion ratio, the chamber state does not
+		self.declare_partials("isp", "expansion_ratio", method="fd", step=1e-4)
 
 	def compute(self, inputs, outputs):
 		chamber_pressure = inputs["chamber_pressure"][0]
@@ -35,13 +40,10 @@ class ChemComponent(ExplicitComponent):
 
 		chem = self.options["chem"]
 
-		cstar = chem.get_cstar(chamber_pressure, mixture_ratio)
-		isp = chem.get_isp(
-			chamber_pressure,
-			mixture_ratio,
-			expansion_ratio,
-		)
+		isp = chem.get_isp(chamber_pressure, mixture_ratio, expansion_ratio)
+		mw, gamma = chem.get_chamber_gas(chamber_pressure, mixture_ratio)
 
-		outputs["cstar"]     = eta_cstar * cstar
-		outputs["t_chamber"] = chem.get_tcomb(chamber_pressure, mixture_ratio)
-		outputs["isp"]       = eta_cstar * isp
+		outputs["isp"]        = eta_cstar * isp
+		outputs["t_chamber"]  = chem.get_tcomb(chamber_pressure, mixture_ratio)
+		outputs["gamma"]      = gamma
+		outputs["molar_mass"] = mw

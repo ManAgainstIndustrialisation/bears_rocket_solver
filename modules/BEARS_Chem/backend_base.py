@@ -8,7 +8,8 @@ from ..Config import CONSTANTS
 class ThermochemistryBackend(Protocol):
 	"""Abstract protocol for chemical equilibrium backends"""
 
-	def get_cstar(self, pc_pa: float, mr: float) -> float:
+	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
+		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
 		...
 
 	def get_tcomb(self, pc_pa: float, mr: float) -> float:

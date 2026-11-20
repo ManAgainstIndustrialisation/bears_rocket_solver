@@ -1,7 +1,14 @@
 # Physical constants
 #
 # Every physical constant used by the solver is defined here and nowhere else
-# in the code. All values are in SI units
+# in the code. Material, fluid and reactant properties live in materials.toml,
+# design inputs in rocket_inputs.toml
+#
+# Values are in SI units
+
+# ============================================================================
+# Universal constants
+# ============================================================================
 
 [universal]
 standard_gravity   = 9.80665           # g0 [m/s^2], exact by definition
@@ -12,14 +19,13 @@ zero_celsius       = 273.15            # 0 degC [K], exact by definition
 # Standard reference state for thermochemistry, e.g. enthalpies of formation
 temperature = 298.15  # [K]
 
+# ============================================================================
+# Atmosphere
+# ============================================================================
+
 [atmosphere]
 # International Standard Atmosphere (ISO 2533), sea level and troposphere
 sea_level_pressure     = 101325.0  # [Pa]
 sea_level_temperature  = 288.15    # [K]
 lapse_rate             = 0.0065    # Tropospheric temperature lapse rate [K/m]
 tropopause_temperature = 216.65    # [K]
-
-[air]
-# Dry air, treated as a calorically perfect ideal gas
-molar_mass = 0.0289644  # [kg/mol]
-gamma      = 1.4        # Ratio of specific heats cp / cv

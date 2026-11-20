@@ -59,23 +59,30 @@ class CEABackend:
 		weights = np.concatenate([w_ox, w_fuel])
 		h = self._reac_mix.calc_property(self._cea.ENTHALPY, weights, self._temps)
 
+		# CEA takes the chamber pressure in bar. The stations are the chamber
+		# [0], the throat [1] and the nozzle exit at area ratio eps [-1]
 		self._solver.solve(
-			self._solution, weights, state[0], 1.0e5,
+			self._solution, weights, state[0] * 1e-5,
 			supar=[state[2]], hc=h / self._cea.R, iac=True,
 		)
 
 		self._last_state = state
 
-	def get_cstar(self, pc_pa: float, mr: float) -> float:
+	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
+		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
 		self._solve(pc_pa, mr, eps=5.0)
-		return float(self._solution.c_star[0])
+		return float(self._solution.MW[0]), float(self._solution.gamma_s[0])
 
 	def get_tcomb(self, pc_pa: float, mr: float) -> float:
 		self._solve(pc_pa, mr, eps=5.0)
 		return float(self._solution.T[0])
 
 	def get_isp(
-		self, pc_pa: float, mr: float, eps: float, p_amb_pa: float = CONSTANTS.atmosphere.sea_level_pressure
+		self,
+		pc_pa    : float,
+		mr       : float,
+		eps      : float,
+		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
 	) -> float:
 		self._solve(pc_pa, mr, eps=eps)
 

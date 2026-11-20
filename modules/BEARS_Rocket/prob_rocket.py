@@ -1,6 +1,7 @@
 #region Imports
 import openmdao.api as om
 
+from math         import pi
 from openmdao.api import Problem
 
 from ..BEARS_Chem      import BEARS_Chem
@@ -27,8 +28,7 @@ class RocketLaunchProblem(Problem):
 		press_wall_material : LayeredWall,
 		press_gas           : Gas,
 		cfg_rocket          : RocketConfig | None = None,
-		payload_mass        : float | None = None,
-		nonprop_mass        : float | None = None,
+		non_propulsion_mass : float | None = None,
 		target_apogee       : float | None = None,
 		press_thermo_model  = None,
 		checks              : tuple[CheckFn, ...] = DEFAULT_ROCKET_CHECKS,
@@ -40,6 +40,13 @@ class RocketLaunchProblem(Problem):
 			cfg_rocket = load_configs()
 
 		self.cfg_rocket = cfg_rocket
+
+		if chem.p_vap_ox is None:
+			raise ValueError(
+				"The oxidizer needs a vapor_pressure_bar entry in the materials "
+				"file to size the pressurant pad gas"
+			)
+		self.p_vap_ox = chem.p_vap_ox
 
 		if press_thermo_model is None:
 			press_thermo_model = create_pressurant_thermo(
@@ -54,6 +61,7 @@ class RocketLaunchProblem(Problem):
 			press_wall_material = press_wall_material,
 			press_gas           = press_gas,
 			press_thermo_model  = press_thermo_model,
+			cfg_aero            = cfg_rocket.cfg_aero,
 		)
 
 		self.driver = om.ScipyOptimizeDriver()
@@ -66,14 +74,9 @@ class RocketLaunchProblem(Problem):
 		# Explicit arguments override the config file values
 		gl = cfg_rocket.cfg_global
 
-		self.payload_mass = (
-			payload_mass if payload_mass is not None
-			else gl.payload_mass_kg
-		)
-
-		self.nonprop_mass = (
-			nonprop_mass if nonprop_mass is not None
-			else gl.nonprop_mass_kg
+		self.non_propulsion_mass = (
+			non_propulsion_mass if non_propulsion_mass is not None
+			else gl.non_propulsion_mass_kg
 		)
 
 		self.target_apogee = (
@@ -82,6 +85,9 @@ class RocketLaunchProblem(Problem):
 		)
 
 		eff_apogee = self.target_apogee / cfg_rocket.cfg_efficiencies.trajectory
+
+		target_thrust = gl.target_thrust_N
+		target_pc     = gl.target_chamber_pressure_bar
 
 		self.model.add_design_var(
 			"OptimizationVars.o_propellant_mass",
@@ -104,11 +110,23 @@ class RocketLaunchProblem(Problem):
 			ref   = 1.5e-5,
 		)
 
+		# The nozzle exit is fixed, so the throat area sets the expansion
+		# ratio, eps = A_exit / A_throat. The throat is kept between 1 cm^2 and
+		# 99 % of the exit area, so that eps stays above 1
+		a_exit = 0.25 * pi * cfg_rocket.cfg_nozzle.nozzle_exit_diameter_m**2
+		a_min  = 1.0e-4
+		a_max  = 0.99 * a_exit
+		if a_min >= a_max:
+			raise ValueError(
+				f"The nozzle exit area ({a_exit * 1e4:.3f} cm^2) is too small "
+				"for the smallest allowed throat (1 cm^2)"
+			)
+
 		self.model.add_design_var(
 			"OptimizationVars.o_nozzle_throat_area",
-			lower = 1.0e-4,
-			upper = 6.0e-4,
-			ref   = 2.0e-4,
+			lower = a_min,
+			upper = a_max,
+			ref   = 5.0e-4,
 		)
 
 		# - Constraints
@@ -118,17 +136,28 @@ class RocketLaunchProblem(Problem):
 			ref   = eff_apogee,
 		)
 
+		# The thrust and apogee targets fix the burn time, so it has no lower
+		# bound, only a sanity cap
 		self.model.add_constraint(
 			"burn_time",
-			lower = 5.0,
 			upper = 15.0,
 			ref   = 6.0,
 		)
 
+		# The engine is sized to deliver the target thrust at the target
+		# chamber pressure
 		self.model.add_constraint(
 			"Propulsion.prop_thrust",
-			upper = 1200.0,
-			ref   = 1000.0,
+			equals = target_thrust,
+			ref    = target_thrust,
+			units  = "N",
+		)
+
+		self.model.add_constraint(
+			"Propulsion.prop_chamber_pressure",
+			equals = target_pc,
+			ref    = target_pc,
+			units  = "bar",
 		)
 
 		# Injector pressure drop safety margin
@@ -159,11 +188,16 @@ class RocketLaunchProblem(Problem):
 		so  = cfg.cfg_optim
 
 		# Vehicle parameters
-		self.set_val("DesignVars.g_payload_mass",    self.payload_mass,  units="kg")
-		self.set_val("DesignVars.g_nonprop_mass",    self.nonprop_mass,  units="kg")
-		self.set_val("DesignVars.g_target_altitude", self.target_apogee, units="m")
-		self.set_val("DesignVars.g_diameter",        gl.diameter_m,      units="m")
-		self.set_val("DesignVars.g_clearance",       gl.clearance_m,     units="m")
+		self.set_val("DesignVars.g_non_propulsion_mass",     self.non_propulsion_mass,       units="kg")
+		self.set_val("DesignVars.g_target_altitude",         self.target_apogee,             units="m")
+		self.set_val("DesignVars.g_target_thrust",           gl.target_thrust_N,             units="N")
+		self.set_val("DesignVars.g_target_chamber_pressure", gl.target_chamber_pressure_bar, units="bar")
+		self.set_val("DesignVars.g_inner_diameter",          gl.inner_rocket_diameter_m,     units="m")
+		self.set_val("DesignVars.g_outer_diameter",          gl.outer_rocket_diameter_m,     units="m")
+		self.set_val("DesignVars.g_clearance",               gl.clearance_m,                 units="m")
+
+		# The non-propulsion mass is given for the configured airframe
+		self.set_val("Mass.ref_diameter", gl.outer_rocket_diameter_m, units="m")
 
 		# Oxidizer tank
 		self.set_val("DesignVars.tank_pressure",        ox.pressure_bar,      units="bar")
@@ -173,7 +207,7 @@ class RocketLaunchProblem(Problem):
 		self.set_val("DesignVars.tank_boss_opening",    ox.boss_opening_m,    units="m")
 		self.set_val("DesignVars.tank_boss_len_fwd",    ox.boss_length_fwd_m, units="m")
 		self.set_val("DesignVars.tank_boss_len_aft",    ox.boss_length_aft_m, units="m")
-		self.set_val("DesignVars.tank_vapor_pressure",  ox.vapor_pressure_bar, units="bar")
+		self.set_val("DesignVars.tank_vapor_pressure",  self.p_vap_ox,         units="Pa")
 
 		# Pressurant tank
 		self.set_val("DesignVars.press_pressure",       pr.pressure_bar,      units="bar")
@@ -191,8 +225,8 @@ class RocketLaunchProblem(Problem):
 		self.set_val("DesignVars.fuel_reg_exponent",      fu.reg_exponent)
 		self.set_val("DesignVars.fuel_reg_ref",           fu.reg_ref_ms,              units="m/s")
 		self.set_val("DesignVars.fuel_oxy_mass_flux_ref", fu.oxy_mass_flux_ref_kgm2s, units="kg/(m**2*s)")
-		self.set_val("DesignVars.nozzle_expansion_ratio", nz.expansion_ratio)
-		self.set_val("DesignVars.nozzle_length",          nz.length_m,                units="m")
+		self.set_val("DesignVars.nozzle_exit_diam",       nz.nozzle_exit_diameter_m,  units="m")
+		self.set_val("DesignVars.conical_nozzle_half_angle", nz.conical_nozzle_half_angle_deg, units="deg")
 
 		self.set_val("EfficiencyVars.eta_combustion",         ef.combustion)
 		self.set_val("EfficiencyVars.eta_trajectory",         ef.trajectory)
@@ -229,6 +263,9 @@ class RocketLaunchProblem(Problem):
 		m_ld   = self.get_val("Mass.prop_loaded_mass",                 units="kg")[0]
 		a_inj  = self.get_val("OptimizationVars.o_injector_area",      units="mm**2")[0]
 		a_thr  = self.get_val("OptimizationVars.o_nozzle_throat_area", units="cm**2")[0]
+		d_ex   = self.get_val("DesignVars.nozzle_exit_diam",           units="mm")[0]
+		eps    = self.get_val("Propulsion.nozzle_expansion_ratio")[0]
+		m_ex   = self.get_val("Propulsion.nozzle_exit_mach")[0]
 		mr     = self.get_val("OptimizationVars.o_mixture_ratio")[0]
 		ap     = self.get_val("apogee",                                units="m")[0]
 		t_burn = self.get_val("burn_time",                             units="s")[0]
@@ -249,6 +286,8 @@ class RocketLaunchProblem(Problem):
 		print(f"Optimized A_inj:          \t{a_inj:{FMT}} mm²")
 		print(f"Optimized A_throat:       \t{a_thr:{FMT}} cm²")
 		print(f"Optimized MR:             \t{mr:{FMT}}")
+		print(f"Nozzle exit diameter:     \t{d_ex:{FMT}} mm")
+		print(f"Expansion ratio:          \t{eps:{FMT}}")
 		print("")
 		print(f"Apogee:                   \t{ap:{FMT}} m")
 		print(f"Burn time:                \t{t_burn:{FMT}} s")
@@ -257,6 +296,7 @@ class RocketLaunchProblem(Problem):
 		print(f"Chamber pressure:         \t{pch:{FMT}} bar")
 		print(f"Chamber flame temp:       \t{tch:{FMT}} K")
 		print(f"Injector ΔP:              \t{dp:{FMT}} bar")
+		print(f"Nozzle exit Mach:         \t{m_ex:{FMT}}")
 		print("")
 		print(f"Dry mass:                 \t{mdry:{FMT}} kg")
 		print(f"Pressurant mass:          \t{mpr:{FMT}} kg")

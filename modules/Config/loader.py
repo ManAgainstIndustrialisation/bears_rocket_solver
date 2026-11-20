@@ -5,6 +5,7 @@ from pathlib     import Path
 import tomllib
 
 from .records import (
+	AerodynamicsConfig,
 	MaterialConfig,
 	GasConfig,
 	LayerConfig,
@@ -25,6 +26,8 @@ from .records import (
 	RocketConfig,
 )
 
+from .constants import INPUTS_DIR, DEFAULT_MATERIALS_PATH
+
 from .validation import (
 	ConfigValidationError,
 	validate_rocket_config,
@@ -32,22 +35,9 @@ from .validation import (
 )
 #endregion
 
+DEFAULT_ROCKET_INPUTS_PATH = INPUTS_DIR / "rocket_inputs.toml"
+
 #region Helpers
-def deep_merge(base: dict, overlay: dict) -> dict:
-	"""Recursively merge `overlay` into a copy of `base`"""
-	merged = dict(base)
-	for k, v in overlay.items():
-		if (
-			k in merged
-			and isinstance(merged[k], dict)
-			and isinstance(v, dict)
-		):
-			merged[k] = deep_merge(merged[k], v)
-		else:
-			merged[k] = v
-
-	return merged
-
 def build_section(cls, data: dict, section: str, **extra):
 	"""
 	Construct the config dataclass `cls` from the TOML table `data`
@@ -67,25 +57,17 @@ def build_section(cls, data: dict, section: str, **extra):
 
 #region Loaders
 def load_configs(
-	path         : str | Path | None = "inputs/rocket.toml",
-	default_path : str | Path        = "inputs/rocket.default.toml",
-	validate     : bool              = True,
+	path     : str | Path = DEFAULT_ROCKET_INPUTS_PATH,
+	validate : bool       = True,
 ) -> RocketConfig:
-	with open(default_path, "rb") as f:
+	with open(path, "rb") as f:
 		data = tomllib.load(f)
 
-	if path is not None:
-		user_file = Path(path)
-
-		if (
-			user_file.exists()
-			and user_file.resolve() != Path(default_path).resolve()
-		):
-			with open(user_file, "rb") as f:
-				data = deep_merge(data, tomllib.load(f))
+	aero = build_section(AerodynamicsConfig, data["aerodynamics"], "aerodynamics")
 
 	cfg = RocketConfig(
 		cfg_global       = build_section(GlobalConfig,   data["global"],           "global"),
+		cfg_aero         = AerodynamicsConfig(tuple(aero.drag_mach), tuple(aero.drag_cd)),
 		cfg_oxy_tank     = build_section(TankConfig,     data["oxidizer_tank"],    "oxidizer_tank"),
 		cfg_press_tank   = build_section(TankConfig,     data["pressurizer_tank"], "pressurizer_tank"),
 		cfg_injector     = build_section(InjectorConfig, data["injector"],         "injector"),
@@ -106,8 +88,8 @@ def load_configs(
 	return cfg
 
 def load_reactants(
-	path     : str | Path,
-	validate : bool = True,
+	path     : str | Path = DEFAULT_MATERIALS_PATH,
+	validate : bool       = True,
 ) -> BipropellantConfig:
 	with open(path, "rb") as f:
 		data = tomllib.load(f)
@@ -126,7 +108,7 @@ def load_reactants(
 
 	return cfg
 
-def load_materials(path: str | Path) -> MaterialsConfig:
+def load_materials(path: str | Path = DEFAULT_MATERIALS_PATH) -> MaterialsConfig:
 	with open(path, "rb") as f:
 		data = tomllib.load(f)
 
@@ -170,7 +152,7 @@ def load_materials(path: str | Path) -> MaterialsConfig:
 
 	return MaterialsConfig(materials=tuple(materials), walls=tuple(walls))
 
-def load_fluids(path: str | Path) -> FluidsConfig:
+def load_fluids(path: str | Path = DEFAULT_MATERIALS_PATH) -> FluidsConfig:
 	with open(path, "rb") as f:
 		data = tomllib.load(f)
 

@@ -1,10 +1,14 @@
 from .constants import (
 	CONSTANTS,
+	AIR,
 	PhysicalConstants,
+	AirProperties,
 	load_constants,
+	load_air,
 )
 
 from .records import (
+	AerodynamicsConfig,
 	MaterialConfig,
 	GasConfig,
 	LayerConfig,

@@ -17,12 +17,12 @@ https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/isentrop/
 #region Imports
 import numpy as np
 
-from ..Config import CONSTANTS
+from ..Config import AIR
 #endregion
 
-# Defaults for air, from the physical constants file
-GAMMA_AIR = CONSTANTS.air.gamma
-R_AIR     = CONSTANTS.air.r_specific
+# Defaults for air, from the materials file
+GAMMA_AIR = AIR.gamma
+R_AIR     = AIR.r_specific
 
 #region Helpers
 def stagnation_factor(mach, gamma=GAMMA_AIR):

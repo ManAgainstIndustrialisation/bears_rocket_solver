@@ -1,19 +1,26 @@
 [global]
-payload_mass_kg         = 1.0
-nonprop_mass_kg         = 8.0
-target_altitude_m       = 3000.0
-diameter_m              = 0.12
-clearance_m             = 0.0
+non_propulsion_mass_kg      = 8.0    # Everything but the propulsion system, payload included
+target_altitude_m           = 3000.0
+target_thrust_N             = 3000.0
+target_chamber_pressure_bar = 30.0
+inner_rocket_diameter_m     = 0.12   # Airframe bore, the tanks fit inside it
+outer_rocket_diameter_m     = 0.125  # Airframe skin, sets the drag area
+clearance_m                 = 0.0    # Radial gap between the bore and the tanks
+
+[aerodynamics]
+# Vehicle drag coefficient against Mach number. Linearly interpolated, and
+# held constant outside the table. Placeholder curve, not yet validated
+drag_mach = [0.8,  1.2,  2.0]
+drag_cd   = [0.48, 0.85, 0.65]
 
 [oxidizer_tank]
 pressure_bar            = 70.0
 diam_m                  = 0.12
-safety_factor           = 2.0
+safety_factor           = 3.0
 ullage_fraction         = 0.1
 boss_opening_m          = 0.02
 boss_length_fwd_m       = 0.015
 boss_length_aft_m       = 0.019
-vapor_pressure_bar      = 63.08  # N2O saturation pressure at the 30 degC ambient
 
 [pressurizer_tank]
 pressure_bar            = 200.0
@@ -42,8 +49,8 @@ max_spread_delay_s      = 0.10
 thermite_density_kgm3   = 3800.0
 
 [nozzle]
-expansion_ratio         = 5.0
-length_m                = 0.2
+nozzle_exit_diameter_m        = 0.09   # Fixed, the expansion ratio A_exit / A_throat follows from it
+conical_nozzle_half_angle_deg = 15.0   # Sets the length, L = (r_exit - r_throat) / tan(angle)
 
 [models]
 atmosphere              = "auto" # "auto" | "isacalc" | "standalone"
@@ -63,4 +70,4 @@ nozzle_friction         = 0.95
 propellant_mass_kg      = 5.0
 mixture_ratio           = 7.0
 injector_area_m2        = 0.0001
-nozzle_throat_area_m2   = 0.0002
+nozzle_throat_area_m2   = 0.0007

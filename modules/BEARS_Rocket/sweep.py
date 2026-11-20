@@ -25,15 +25,25 @@ def sweep_diameters(
 	diameters_m : Sequence[float],
 	quiet       : bool = True,
 ) -> list[DiameterSweepPoint]:
+	"""
+	Re-optimize over a range of outer airframe diameters. The airframe wall
+	thickness is held at its configured value, so the bore and the tanks grow
+	with the outer diameter
+	"""
 	results = []
 	clearance = prob.get_val("DesignVars.g_clearance", units="m")[0]
+	d_inner_0 = prob.get_val("DesignVars.g_inner_diameter", units="m")[0]
+	d_outer_0 = prob.get_val("DesignVars.g_outer_diameter", units="m")[0]
+	wall      = d_outer_0 - d_inner_0
 
 	for d in diameters_m:
-		d_tank = d - 2.0 * clearance
+		d_inner = d - wall
+		d_tank  = d_inner - 2.0 * clearance
 
-		prob.set_val("DesignVars.g_diameter", d,      units="m")
-		prob.set_val("DesignVars.tank_diam",  d_tank, units="m")
-		prob.set_val("DesignVars.press_diam", d_tank, units="m")
+		prob.set_val("DesignVars.g_outer_diameter", d,       units="m")
+		prob.set_val("DesignVars.g_inner_diameter", d_inner, units="m")
+		prob.set_val("DesignVars.tank_diam",        d_tank,  units="m")
+		prob.set_val("DesignVars.press_diam",       d_tank,  units="m")
 
 		if quiet: prob.driver.opt_settings["disp"] = False
 
@@ -72,7 +82,7 @@ def sweep_diameters(
 #region Formatting
 def format_sweep_org_table(points: Sequence[DiameterSweepPoint]) -> str:
 	header = (
-		"| Diam [m] | L_ox [m] | L_press [m] | L_fuel [m] | L_nozzle [m] "
+		"| D_out [m] | L_ox [m] | L_press [m] | L_fuel [m] | L_nozzle [m] "
 		"| L_tot [m] | M_prop [kg] | M_dry [kg] | Apogee [m] | Conv |"
 	)
 

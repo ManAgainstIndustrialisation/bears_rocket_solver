@@ -14,6 +14,7 @@ class Reactant:
 	enthalpy_units : Optional[str]
 	density        : Optional[float]
 	density_units  : Optional[str]
+	vapor_pressure : Optional[float]
 
 	def __init__(self, reacdict: dict):
 		"""Construct a Reactant object from a dictionary"""
@@ -30,21 +31,23 @@ class Reactant:
 		self.enthalpy_units = reacdict.get("enthalpy_units", "cal/mol")
 		self.density        = reacdict.get("density")
 		self.density_units  = reacdict.get("density_units")
+		self.vapor_pressure = reacdict.get("vapor_pressure_bar")
 
 		self.compile_formula()
 
 	@classmethod
 	def from_config(cls, cfg: SpeciesConfig) -> "Reactant":
 		return cls({
-			"name"           : cfg.name,
-			"reactype"       : cfg.role or "fuel",
-			"formula_parts"  : cfg.formula_parts,
-			"mass_fraction"  : cfg.mass_fraction,
-			"temperature"    : cfg.temperature_k,
-			"enthalpy"       : cfg.enthalpy,
-			"enthalpy_units" : cfg.enthalpy_units,
-			"density"        : cfg.density,
-			"density_units"  : cfg.density_units,
+			"name"               : cfg.name,
+			"reactype"           : cfg.role or "fuel",
+			"formula_parts"      : cfg.formula_parts,
+			"mass_fraction"      : cfg.mass_fraction,
+			"temperature"        : cfg.temperature_k,
+			"enthalpy"           : cfg.enthalpy,
+			"enthalpy_units"     : cfg.enthalpy_units,
+			"density"            : cfg.density,
+			"density_units"      : cfg.density_units,
+			"vapor_pressure_bar" : cfg.vapor_pressure_bar,
 		})
 
 	def compile_formula(self):

@@ -34,20 +34,21 @@ from .relations import (
 _M_MIN = 1e-12  # Lower bracket for subsonic branches, where A/A* -> infinity
 _M_MAX = 1e8    # Bracket growth limit for supersonic branches
 
-def _solve_mach(func, dfunc, target, m_lo, m_hi, grow=False):
+def _solve_mach(func, dfunc, target, gamma, m_lo, m_hi, grow=False):
 	"""
-	Solve func(M) = target for M within [m_lo, m_hi], where func is monotonic
-	on that interval
+	Solve func(M, gamma) = target for M within [m_lo, m_hi], where func is
+	monotonic in M on that interval
 
-	With `grow`, m_hi is doubled until the root is bracketed. The real part is
-	solved with Brent's method. A complex target (complex step) gets one Newton
-	step from the real root, which carries the derivative into the imaginary
-	part exactly
+	With `grow`, m_hi is doubled until the root is bracketed. The real problem
+	is solved with Brent's method. If the target or gamma is complex (complex
+	step), one Newton step from the real root carries the derivative into the
+	imaginary part exactly
 	"""
 	target = np.asarray(target)
+	gamma  = np.asarray(gamma)
 
-	def solve_one(y):
-		residual = lambda m: func(m) - y
+	def solve_one(y, gam):
+		residual = lambda m: func(m, gam) - y
 		tol      = 1e-13 * max(1.0, abs(y))
 
 		lo, hi = m_lo, m_hi
@@ -60,12 +61,12 @@ def _solve_mach(func, dfunc, target, m_lo, m_hi, grow=False):
 
 		return brentq(residual, lo, hi, xtol=1e-15, rtol=1e-15)
 
-	mach = np.vectorize(solve_one, otypes=[float])(np.real(target))
+	mach = np.vectorize(solve_one, otypes=[float])(np.real(target), np.real(gamma))
 
-	if np.iscomplexobj(target):
-		slope = dfunc(mach)
+	if np.iscomplexobj(target) or np.iscomplexobj(gamma):
+		slope = dfunc(mach, np.real(gamma))
 		with np.errstate(divide="ignore", invalid="ignore"):
-			step = (func(mach) - target) / slope
+			step = (func(mach, gamma) - target) / slope
 		mach = np.where(slope != 0.0, mach - step, mach)
 
 	return mach[()]
@@ -134,9 +135,8 @@ def mach_from_area_ratio(area_ratio_value, gamma=GAMMA_AIR, *, supersonic: bool)
 
 	m_lo, m_hi = (1.0, 2.0) if supersonic else (_M_MIN, 1.0)
 	return _solve_mach(
-		lambda m: area_ratio(m, gamma),
-		lambda m: _d_area_ratio(m, gamma),
-		area_ratio_value, m_lo, m_hi, grow=supersonic,
+		area_ratio, _d_area_ratio,
+		area_ratio_value, gamma, m_lo, m_hi, grow=supersonic,
 	)
 
 def mach_from_mass_flow_parameter(mfp, gamma=GAMMA_AIR, *, supersonic: bool):
@@ -144,7 +144,7 @@ def mach_from_mass_flow_parameter(mfp, gamma=GAMMA_AIR, *, supersonic: bool):
 	M from the mass flow parameter mdot * sqrt(R * T_t) / (A * p_t), on the
 	subsonic or supersonic branch. It cannot exceed its choked value at M = 1
 	"""
-	mfp_choked = mass_flow_parameter(1.0, gamma)
+	mfp_choked = float(np.real(mass_flow_parameter(1.0, gamma)))
 	_require(
 		(np.real(mfp) > 0.0) & (np.real(mfp) <= mfp_choked * (1.0 + 1e-12)),
 		f"Mass flow parameter must be in (0, {mfp_choked:.5f}] (choked flow)",
@@ -152,22 +152,20 @@ def mach_from_mass_flow_parameter(mfp, gamma=GAMMA_AIR, *, supersonic: bool):
 
 	m_lo, m_hi = (1.0, 2.0) if supersonic else (_M_MIN, 1.0)
 	return _solve_mach(
-		lambda m: mass_flow_parameter(m, gamma),
-		lambda m: _d_mass_flow_parameter(m, gamma),
-		mfp, m_lo, m_hi, grow=supersonic,
+		mass_flow_parameter, _d_mass_flow_parameter,
+		mfp, gamma, m_lo, m_hi, grow=supersonic,
 	)
 
 def mach_from_prandtl_meyer_angle(nu, gamma=GAMMA_AIR):
 	"""M >= 1 from the Prandtl-Meyer angle nu [rad]"""
-	nu_max = prandtl_meyer_max(gamma)
+	nu_max = float(np.real(prandtl_meyer_max(gamma)))
 	_require(
 		(np.real(nu) >= 0.0) & (np.real(nu) < nu_max),
 		f"Prandtl-Meyer angle must be in [0, {nu_max:.5f}) rad",
 	)
 
 	return _solve_mach(
-		lambda m: prandtl_meyer_angle(m, gamma),
-		lambda m: _d_prandtl_meyer_angle(m, gamma),
-		nu, 1.0, 2.0, grow=True,
+		prandtl_meyer_angle, _d_prandtl_meyer_angle,
+		nu, gamma, 1.0, 2.0, grow=True,
 	)
 #endregion

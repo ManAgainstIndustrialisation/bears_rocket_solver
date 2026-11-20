@@ -38,8 +38,9 @@ In descending order of importance:
       temperatures and enthalpies of formation
 
 - [x] Move optimization options and inputs from `solver.py` to JSON files in
-      `inputs/` &rarr; Defaults and overrides in `inputs/rocket.default.toml`
-      and `inputs/rocket.toml`
+      `inputs/` &rarr; Design inputs in `inputs/rocket_inputs.toml`, material
+      properties in `inputs/materials.toml`, physical constants in
+      `inputs/constants.toml`
 
 - [x] Fix RocketCEA's garbage folders
 
@@ -72,8 +73,10 @@ The hope of organizing the code into MDAO class structure is that each layer of 
 ```
 bears_rocket_solver
 ├── solver.py                   # Central calculation script
-├── inputs                      # Solver configuration JSON files
-│   └── ...
+├── inputs                      # Solver configuration TOML files
+│   ├── rocket_inputs.toml      # - Rocket design inputs and optimizer seed
+│   ├── materials.toml          # - Air, structural, gas and reactant properties
+│   └── constants.toml          # - Physical constants
 ├── modules
 │   ├── BEARS_Atmo              # Atmospheric model package
 │   │   ├── atmo.py
@@ -93,7 +96,7 @@ bears_rocket_solver
 │       ├── group_prop.py       # - Propulsion group, connects the tank,
 │       │                       #   injector, nozzle and reaction chemistry
 │       │                       #   components
-│       ├── comp_mass.py        # - Mass profile component, connects payload,
+│       ├── comp_mass.py        # - Mass profile component, connects non-prop,
 │       │                       #   propellant, and structural mass
 │       │                       #   calculations
 │       ├── comp_traj.py        # - Trajectory and aerodynamics component
@@ -145,7 +148,7 @@ Model components in detail:
 | --------- | -------------- | ------ | ------- | -------- |
 | RocketGroup | Group | - | - | The top-level rocket assembly group. This is where the inputs and outputs of individual subsystems are connected together |
 | TrajectoryComponent | ExplicitComponent | `thrust`<br>`isp`<br>`initial_mass`<br>`dry_mass`<br>`diameter` | `apogee` | The trajectory calculator component, including simple drag calculations using the atmospheric model. In the future, this component may also contain the encoding of the flight plan for >1D trajectories. |
-| MassComponent | ExplicitComponent | `payload_mass`<br>`propellant_mass`<br>`structural_coefficient` | `initial_mass`<br>`dry_mass` | Mass profile of the rocket. Preliminary and will probably be superseded by better calculation methods. |
+| MassComponent | ExplicitComponent | `non_propulsion_mass`<br>`propellant_mass`<br>`structural_coefficient` | `initial_mass`<br>`dry_mass` | Mass profile of the rocket. Preliminary and will probably be superseded by better calculation methods. |
 | ChemComponent | ExplicitComponent | `chamber_pressure`<br>`mixture_ratio`<br>`expansion_ratio` | `cstar`<br>`isp`<br>`thrust` | Propulsion chemistry subsystem using the CEA solver. This is to be broken up into further subassemblies: nozzle, fuel stack, tank(, injector?) |
 
 This structure is in early development and is subject to drastic change. This

@@ -7,11 +7,18 @@ from .constants import CONSTANTS
 #region Design
 @dataclass(frozen=True)
 class GlobalConfig:
-	payload_mass_kg         : float # [kg]
-	nonprop_mass_kg         : float # [kg]
-	target_altitude_m       : float # [m]
-	diameter_m              : float # [m]
-	clearance_m             : float # [m]
+	non_propulsion_mass_kg      : float # Everything but the propulsion system [kg]
+	target_altitude_m           : float # [m]
+	target_thrust_N             : float # [N]
+	target_chamber_pressure_bar : float # [bar]
+	inner_rocket_diameter_m     : float # Airframe bore, holds the tanks [m]
+	outer_rocket_diameter_m     : float # Airframe skin, sets the drag area [m]
+	clearance_m                 : float # [m]
+
+@dataclass(frozen=True)
+class AerodynamicsConfig:
+	drag_mach               : tuple[float, ...] # Mach number breakpoints, increasing
+	drag_cd                 : tuple[float, ...] # Drag coefficient at each breakpoint
 
 @dataclass(frozen=True)
 class TankConfig:
@@ -22,7 +29,6 @@ class TankConfig:
 	boss_opening_m          : float = 0.02  # [m]
 	boss_length_fwd_m       : float = 0.015 # [m]
 	boss_length_aft_m       : float = 0.015 # [m]
-	vapor_pressure_bar      : float | None = None # Stored liquid Psat [bar]
 	reg_margin_bar          : float = 20.0  # [bar]
 	ambient_temp_c          : float = 30.0  # [deg C]
 
@@ -47,8 +53,8 @@ class IgniterConfig:
 
 @dataclass(frozen=True)
 class NozzleConfig:
-	expansion_ratio         : float
-	length_m                : float # [m]
+	nozzle_exit_diameter_m        : float # Fixed exit diameter [m]
+	conical_nozzle_half_angle_deg : float # Divergent cone half angle [deg]
 
 @dataclass(frozen=True)
 class ModelsConfig:
@@ -84,6 +90,7 @@ class SpeciesConfig:
 	enthalpy_units          : str   | None = None
 	density                 : float | None = None
 	density_units           : str   | None = None
+	vapor_pressure_bar      : float | None = None # Saturation pressure [bar]
 	role                    : str   | None = None
 
 @dataclass(frozen=True)
@@ -147,6 +154,7 @@ class FluidsConfig:
 @dataclass(frozen=True)
 class RocketConfig:
 	cfg_global        : GlobalConfig
+	cfg_aero          : AerodynamicsConfig
 	cfg_oxy_tank      : TankConfig
 	cfg_press_tank    : TankConfig
 	cfg_injector      : InjectorConfig

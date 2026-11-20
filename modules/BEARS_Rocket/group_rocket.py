@@ -5,6 +5,7 @@ from ..BEARS_Chem      import BEARS_Chem
 from ..BEARS_Atmo      import BEARS_Atm
 from ..BEARS_Materials import Gas
 from ..BEARS_Vessels   import LayeredWall
+from ..Config          import AerodynamicsConfig
 
 from .group_prop import PropulsionGroup
 from .comp_mass  import MassComponent
@@ -21,6 +22,7 @@ class RocketGroup(Group):
 		self.options.declare("press_wall_material", types=LayeredWall)
 		self.options.declare("press_gas",           types=Gas)
 		self.options.declare("press_thermo_model",  default=None)
+		self.options.declare("cfg_aero",            types=AerodynamicsConfig)
 
 	def setup(self):
 		chem         = self.options["chem"]
@@ -36,12 +38,14 @@ class RocketGroup(Group):
 		ivc = self.add_subsystem("DesignVars", IndepVarComp())
 
 		# - Global/master inputs
-		ivc.add_output("g_payload_mass",         val=1.0,    units="kg")
-		ivc.add_output("g_nonprop_mass",         val=5.0,    units="kg")
-		ivc.add_output("g_target_altitude",      val=3000.0, units="m")
+		ivc.add_output("g_non_propulsion_mass",     val=8.0,    units="kg")
+		ivc.add_output("g_target_altitude",         val=3000.0, units="m")
+		ivc.add_output("g_target_thrust",           val=3000.0, units="N")
+		ivc.add_output("g_target_chamber_pressure", val=30.0,   units="bar")
 
-		# Airframe diameter
-		ivc.add_output("g_diameter",             val=0.5,    units="m")
+		# Airframe diameters: the tanks fit the bore, the skin sets the drag
+		ivc.add_output("g_inner_diameter",       val=0.12,   units="m")
+		ivc.add_output("g_outer_diameter",       val=0.125,  units="m")
 
 		# Clearance for component mounting
 		ivc.add_output("g_clearance",            val=0.002,  units="m")
@@ -70,7 +74,6 @@ class RocketGroup(Group):
 		ivc.add_output("press_ambient_temp",     val=30.0,   units="degC")
 
 		# - Injector
-		ivc.add_output("injector_area",          val=4.5e-5, units="m**2")
 		ivc.add_output("injector_cd",            val=0.7)
 
 		# - Fuel
@@ -80,9 +83,8 @@ class RocketGroup(Group):
 		ivc.add_output("fuel_oxy_mass_flux_ref", val=1.0,    units="kg/(m**2*s)")
 
 		# - Nozzle
-		ivc.add_output("nozzle_throat_area",     val=5.0e-4, units="m**2")
-		ivc.add_output("nozzle_expansion_ratio", val=40.0)
-		ivc.add_output("nozzle_length",          val=0.20,   units="m")
+		ivc.add_output("nozzle_exit_diam",       val=0.065,  units="m")
+		ivc.add_output("conical_nozzle_half_angle", val=15.0, units="deg")
 
 		# Efficiencies:
 		evc = self.add_subsystem("EfficiencyVars", IndepVarComp())
@@ -98,7 +100,7 @@ class RocketGroup(Group):
 		ovc.add_output("o_propellant_mass",    val=10.0,   units="kg")
 		ovc.add_output("o_mixture_ratio",      val=6.0)
 		ovc.add_output("o_injector_area",      val=1.5e-5, units="m**2")
-		ovc.add_output("o_nozzle_throat_area", val=2.0e-4, units="m**2")
+		ovc.add_output("o_nozzle_throat_area", val=7.0e-4, units="m**2")
 		#endregion
 
 		#region Subsystems
@@ -117,7 +119,7 @@ class RocketGroup(Group):
 
 		self.add_subsystem(
 			"Trajectory",
-			TrajectoryComponent(atm=atm),
+			TrajectoryComponent(atm=atm, aero=self.options["cfg_aero"]),
 			promotes_outputs=["burn_time", "apogee"],
 		)
 		#endregion
@@ -153,19 +155,18 @@ class RocketGroup(Group):
 		self.connect("DesignVars.injector_cd",             "Propulsion.injector_cd")
 
 		# - Nozzle
-		self.connect("DesignVars.nozzle_expansion_ratio",  "Propulsion.nozzle_expansion_ratio")
-		self.connect("DesignVars.nozzle_length",           "Propulsion.nozzle_length")
+		self.connect("DesignVars.nozzle_exit_diam",        "Propulsion.nozzle_exit_diam")
+		self.connect("DesignVars.conical_nozzle_half_angle", "Propulsion.conical_nozzle_half_angle")
 
 		# - Mass
-		self.connect("DesignVars.g_payload_mass",          "Mass.payload_mass")
-		self.connect("DesignVars.g_nonprop_mass",          "Mass.nonprop_mass")
-		self.connect("DesignVars.g_diameter",              "Mass.diameter")
+		self.connect("DesignVars.g_non_propulsion_mass",   "Mass.non_propulsion_mass")
+		self.connect("DesignVars.g_outer_diameter",        "Mass.diameter")
 		self.connect("Propulsion.tank_dry_mass",           "Mass.ox_tank_mass")
 		self.connect("Propulsion.press_dry_mass",          "Mass.press_tank_mass")
 		self.connect("Propulsion.press_press_mass",        "Mass.pressurant_mass")
 
 		# - Trajectory
-		self.connect("DesignVars.g_diameter",              "Trajectory.diameter")
+		self.connect("DesignVars.g_outer_diameter",        "Trajectory.diameter")
 		self.connect("Propulsion.prop_isp",                "Trajectory.isp")
 		self.connect("Propulsion.prop_thrust",             "Trajectory.thrust")
 		self.connect("Mass.initial_mass",                  "Trajectory.initial_mass")
