@@ -4,117 +4,75 @@ import numpy as np
 from math         import pi
 from openmdao.api import ExplicitComponent
 
+from ..Config        import Wall
 from ..BEARS_Vessels import (
-	LayeredWall,
-	DomeGeometry,
-	IsotensoidDome,
+	domes_internal_volume,
+	domes_length,
 	tank_internal_volume,
+	size_layers,
+	layer_masses,
 )
 #endregion
 
 class TankComponent(ExplicitComponent):
+	"""
+	Cylindrical pressure tank closed by isotensoid domes, sized around the
+	fluid it stores. The wall layers are sized to the tank pressure
+
+	Subclasses add the inputs of their stored fluid and call `size_tank` with
+	its mass, density and ullage fraction
+	"""
 
 	def initialize(self):
-		self.options.declare("wall_material", types=LayeredWall)
-		self.options.declare(
-			"dome_geometry",
-			default = None,
-			types   = (DomeGeometry, type(None)),
-		)
-
-	def setup_fluid_inputs(self):
-		self.add_input("m_fluid",     val=10.0,   units="kg")
-		self.add_input("rho_fluid",   val=1000.0, units="kg/m**3")
-		self.add_input("ullage_frac", val=0.1)
+		self.options.declare("wall", types=Wall)  # Wall layup, from the inside out
 
 	def setup(self):
-		self.setup_fluid_inputs()
+		n_layers = len(self.options["wall"].layers)
 
-		wall = self.options["wall_material"]
-		n_layers = len(wall.layers)
+		self.add_input("p_tank_max",    val=70e5,  units="Pa")  # Maximum tank pressure
+		self.add_input("diam_out",      val=0.15,  units="m")   # Outer tank diameter
+		self.add_input("safety_factor", val=1.5)                # Burst over maximum pressure [-]
+		self.add_input("boss_len_fwd",  val=0.015, units="m")   # Forward boss fitting length
+		self.add_input("boss_len_aft",  val=0.015, units="m")   # Aft boss fitting length
 
-		self.add_input("p_tank_max",    val=70e5,   units="Pa")
-		self.add_input("diam_out",      val=0.15,   units="m")
-
-		self.add_input("safety_factor", val=1.5)
-		self.add_input("r_boss",        val=0.02,   units="m")
-		self.add_input("boss_len_fwd",  val=0.015,  units="m")
-		self.add_input("boss_len_aft",  val=0.015,  units="m")
-
-		self.add_output("t_wall",       val=0.002,  units="m")
-		self.add_output("t_liner",      val=0.001,  units="m")
-		self.add_output("t_wrap",       val=0.001,  units="m")
-		self.add_output("m_liner",      val=1.0,    units="kg")
-		self.add_output("m_wrap",       val=1.0,    units="kg")
-
-		self.add_output("t_layers",                 units="m",  shape=n_layers)
-		self.add_output("m_layers",                 units="kg", shape=n_layers)
-
-		self.add_output("l_tank",       val=5.0,    units="m")
-		self.add_output("v_internal",   val=5.0,    units="m**3")
-		self.add_output("v_fluid",      val=4.5,    units="m**3")
-		self.add_output("m_tank_dry",   val=2.0,    units="kg")
+		self.add_output("t_layers",   units="m",  shape=n_layers)  # Thickness of each wall layer, inside out
+		self.add_output("m_layers",   units="kg", shape=n_layers)  # Mass of each wall layer, inside out
+		self.add_output("t_wall",     val=0.002, units="m")        # Total wall thickness
+		self.add_output("l_tank",     val=0.5,   units="m")        # Overall length, domes and bosses included
+		self.add_output("v_internal", val=0.01,  units="m**3")     # Internal volume
+		self.add_output("v_fluid",    val=0.009, units="m**3")     # Volume of the stored fluid
+		self.add_output("m_tank_dry", val=2.0,   units="kg")       # Empty tank mass
 
 	def setup_partials(self):
 		self.declare_partials("*", "*", method="cs")
 
-	def fluid_state(self, inputs):
-		"""Return the stored fluid `(mass, density, ullage fraction)`"""
-		return inputs["m_fluid"], inputs["rho_fluid"], inputs["ullage_frac"]
+	def size_tank(self, inputs, outputs, m_fluid, rho_fluid, ullage_frac):
+		"""Size the wall and geometry around `m_fluid` [kg] of fluid of density `rho_fluid` [kg/m^3]"""
+		wall  = self.options["wall"]
+		r_out = inputs["diam_out"][0] / 2.0
 
-	def compute(self, inputs, outputs):
-		self.size_tank(inputs, outputs, *self.fluid_state(inputs))
-
-	def size_tank(self, inputs, outputs, m_fluid, rho_f, uf):
-		"""Size the tank wall and geometry around the given fluid state"""
-		p_max = inputs["p_tank_max"][0]
-		d_out = inputs["diam_out"][0]
-		sf    = inputs["safety_factor"][0]
-
-		r_boss = inputs["r_boss"][0]
-		bfwd   = inputs["boss_len_fwd"][0]
-		baft   = inputs["boss_len_aft"][0]
-
-		wall = self.options["wall_material"]
-
-		dome = self.options["dome_geometry"]
-		if dome is None: dome = IsotensoidDome()
-
-		r_out  = d_out / 2.0
-		ts     = wall.size_layers(p_max, r_out, sf, r_boss=r_boss)
+		ts     = size_layers(wall, inputs["p_tank_max"][0], r_out, inputs["safety_factor"][0])
 		t_wall = sum(ts)
+		r_in   = r_out - t_wall
 
-		r_in = r_out - t_wall
-
-		# Volumes and lengths
-		v_fluid = m_fluid / rho_f
-		v_int   = tank_internal_volume(v_fluid, uf)
-		v_caps  = dome.internal_volume(r_in, r_boss=r_boss)
-
-		diff_v = v_int - v_caps
+		# The cylinder holds whatever the domes do not, never a negative volume
+		v_fluid = m_fluid / rho_fluid
+		v_int   = tank_internal_volume(v_fluid, ullage_frac)
+		diff_v  = v_int - domes_internal_volume(r_in)
 		if np.iscomplexobj(diff_v):
 			v_cyl = diff_v if diff_v.real > 0.0 else 0.0
 		else:
 			v_cyl = max(0.0, diff_v)
 
-		a_int  = pi * r_in**2
-		l_cyl  = v_cyl / a_int
-		l_caps = dome.total_length(r_in, r_boss=r_boss)
-		l_tot  = l_cyl + l_caps + bfwd + baft
+		l_cyl = v_cyl / (pi * r_in**2)
+		l_tot = l_cyl + domes_length(r_in) + inputs["boss_len_fwd"][0] + inputs["boss_len_aft"][0]
 
-		m_dry, masses = wall.compute_masses(
-			ts, r_in, l_cyl, dome=dome, r_boss=r_boss,
-		)
+		masses = layer_masses(wall, ts, r_in, l_cyl)
 
 		outputs["t_layers"]   = np.asarray(ts)
 		outputs["m_layers"]   = np.asarray(masses)
-		outputs["t_liner"]    = ts[0]
-		outputs["t_wrap"]     = ts[1] if len(ts) > 1 else 0.0
-		outputs["m_liner"]    = masses[0]
-		outputs["m_wrap"]     = masses[1] if len(masses) > 1 else 0.0
 		outputs["t_wall"]     = t_wall
-
 		outputs["l_tank"]     = l_tot
 		outputs["v_internal"] = v_int
 		outputs["v_fluid"]    = v_fluid
-		outputs["m_tank_dry"] = m_dry
+		outputs["m_tank_dry"] = sum(masses)

@@ -4,12 +4,20 @@
 # here and nowhere else in the code. Physical constants live in constants.toml,
 # design inputs in rocket_inputs.toml
 #
-# Values are in SI units unless a key or a *_units entry says otherwise
+# Values are in SI units unless a key or a *_units entry says otherwise. Every
+# key is required unless its comment says it is optional
 
 [air]
 # Dry air, treated as a calorically perfect ideal gas
-molar_mass = 0.0289644  # [kg/mol]
-gamma      = 1.4        # Ratio of specific heats cp / cv
+molar_mass = 0.0289644 # Molar mass [kg/mol]
+gamma      = 1.4       # Ratio of specific heats cp / cv [-]
+
+# Structural materials. Keys of each entry:
+#   id                 Name the wall layers below refer to
+#   name               Display name
+#   density            Density, in density_units ("kg/m^3" or "g/cm^3")
+#   yield_strength     Stress at the onset of plastic flow, in strength_units ("Pa" or "MPa")
+#   ultimate_strength  Stress at failure, in strength_units
 
 [[material]]
 id                = "AL_6061_T6"
@@ -19,8 +27,6 @@ density_units     = "kg/m^3"
 yield_strength    = 276.0
 ultimate_strength = 310.0
 strength_units    = "MPa"
-elastic_modulus   = 68.9
-modulus_units     = "GPa"
 
 [[material]]
 id                = "CFRP_T700"
@@ -30,17 +36,21 @@ density_units     = "kg/m^3"
 yield_strength    = 1800.0
 ultimate_strength = 2100.0
 strength_units    = "MPa"
-elastic_modulus   = 135.0
-modulus_units     = "GPa"
 
-# Tank wall layups, built from the materials above. A layer without
-# thickness_m is sized to the tank pressure
+# Tank wall layups, layers from the inside out. Keys of each layer:
+#   material           Material id from above
+#   thickness_m        Fixed thickness [m]. Optional: one layer per wall may
+#                      leave it out to be sized to the tank pressure
+#   helical_angle_deg  Composite only: winding angle of the helical fibers to the tank axis [deg]
+#   efficiency         Composite only: share of the fiber strength the layer realizes [-]
+#   fiber_volume_frac  Composite only: fiber share of the layer volume [-]
+# A layer with a helical_angle_deg is a composite, one without is a metal
 
 [[wall]]
-id = "copv_press"
+id = "copv_press" # Wall id the rocket inputs refer to
 
   [[wall.layers]]
-  material = "AL_6061_T6"
+  material    = "AL_6061_T6"
   thickness_m = 0.001
 
   [[wall.layers]]
@@ -50,10 +60,10 @@ id = "copv_press"
   fiber_volume_frac = 0.72
 
 [[wall]]
-id = "copv_ox"
+id = "copv_ox" # Wall id the rocket inputs refer to
 
   [[wall.layers]]
-  material = "AL_6061_T6"
+  material    = "AL_6061_T6"
   thickness_m = 0.001
 
   [[wall.layers]]
@@ -61,28 +71,41 @@ id = "copv_ox"
   helical_angle_deg = 20.0
   efficiency        = 0.85
   fiber_volume_frac = 0.72
+
+# Pressurant gases. Keys of each entry:
+#   id             Name the rocket inputs refer to
+#   name           Display name
+#   coolprop_name  Fluid name in CoolProp, for the real-gas model
+#   molar_mass     Molar mass [kg/mol]
+#   gamma          Ratio of specific heats cp / cv [-]
+#   z_factor       Compressibility factor in the full bottle, for the ideal-gas model [-]
 
 [[gas]]
 id            = "N2"
 name          = "Nitrogen Gas"
 coolprop_name = "N2"
-molar_mass    = 28.0134  # [kg/kmol]
+molar_mass    = 0.0280134
 gamma         = 1.40
 z_factor      = 1.15
-t_crit_k      = 126.192
-p_crit_pa     = 33.958e5
-acentric      = 0.0372
 
 [[gas]]
 id            = "He"
 name          = "Helium Gas"
 coolprop_name = "He"
-molar_mass    = 4.0026   # [kg/kmol]
+molar_mass    = 0.0040026
 gamma         = 1.667
 z_factor      = 1.05
-t_crit_k      = 5.1953
-p_crit_pa     = 2.2746e5
-acentric      = -0.390
+
+# Propellant reactants: [[fuel]] entries blend into the fuel grain, exactly one
+# [[oxid]] is the liquid oxidizer. Keys of each entry:
+#   name                CEA species name, or a new name for a custom species
+#   mass_fraction       Share by mass among the species of the same role, relative [-]
+#   formula_parts       Atom counts, as a list of parts that are summed, e.g. the monomers of a copolymer
+#   temperature_k       Temperature at injection [K]
+#   enthalpy            Enthalpy of formation, in enthalpy_units ("j/mol" or "kj/mol").
+#                       Optional: leave both out to take it from the CEA library
+#   density             Density, in density_units ("kg/m^3" or "g/cm^3")
+#   vapor_pressure_bar  Oxidizer only: saturation pressure at storage temperature [bar]
 
 [[fuel]]
 name           = "Paraffin"
@@ -110,8 +133,9 @@ density_units  = "g/cm^3"
 
 [[oxid]]
 name               = "N2O"
+mass_fraction      = 1.0
 formula_parts      = [{ N = 2, O = 1 }]
 temperature_k      = 298.15
 density            = 0.6881
 density_units      = "g/cm^3"
-vapor_pressure_bar = 63.08  # Saturation pressure at 30 degC, the pressurant ambient_temp_c
+vapor_pressure_bar = 63.08 # At 30 degC, the pressurizer_tank ambient_temp_c

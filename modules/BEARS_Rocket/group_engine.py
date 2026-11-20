@@ -7,22 +7,24 @@ from ..BEARS_Chem import BEARS_Chem
 
 from .comp_injector import InjectorComponent
 from .comp_fuel     import FuelComponent
-#from .comp_igniter  import IgniterComponent
 from .comp_chem     import ChemComponent
 from .comp_nozzle   import NozzleGeometryComponent, NozzleComponent
 #endregion
 
 class HybridEngineGroup(Group):
+	"""
+	Hybrid engine: injector, fuel grain, combustion chemistry and nozzle
+
+	The chamber pressure couples them: it sets the injector flow and the
+	chemistry, which set the chamber pressure through the choked nozzle. A
+	Newton solver closes the loop
+	"""
 
 	def initialize(self):
-		self.options.declare("chem", types=BEARS_Chem)
+		self.options.declare("chem", types=BEARS_Chem)  # Chemistry of the propellant combination
 
 	def setup(self):
 		chem = self.options["chem"]
-
-		self.set_input_defaults("engine_feed_pressure",      val=60e5,   units="Pa")
-		self.set_input_defaults("nozzle_throat_area",        val=7.0e-4, units="m**2")
-		self.set_input_defaults("conical_nozzle_half_angle", val=15.0,   units="deg")
 
 		#region Subsystems
 		self.add_subsystem(
@@ -48,37 +50,16 @@ class HybridEngineGroup(Group):
 				("port_diam",     "fuel_port_diam"),
 				("n_reg",         "fuel_reg_exponent"),
 				("reg_ref",       "fuel_reg_ref"),
-				("g0_ref",        "fuel_oxy_mass_flux_ref"),
+				("g_ox_ref",      "fuel_oxy_mass_flux_ref"),
 				("eta_reg",       "fuel_eta_reg"),
 			],
 			promotes_outputs=[
 				("length",     "fuel_length"),
 				("grain_diam", "fuel_grain_diam"),
 				("r_dot",      "fuel_regression_rate"),
-				("m_fuel",     "fuel_mass"),
 				("mdot_fuel",  "engine_mdot_fuel"),
 			],
 		)
-
-		"""
-		self.add_subsystem(
-			"Igniter",
-			IgniterComponent(),
-			promotes_inputs=[
-				("diam_out",    "fuel_port_diam"),
-				("fuel_length", "fuel_length"),
-			],
-			promotes_outputs=[
-				("lining_thickness", "igniter_lining_thickness"),
-				("diam_in",          "igniter_inner_diam"),
-				("port_blockage",    "igniter_port_blockage"),
-				("thermite_mass",    "igniter_thermite_mass"),
-				("num_pads",         "igniter_pad_count"),
-				("pad_spacing",      "igniter_pad_spacing"),
-				("ignition_margin",  "igniter_thermal_margin"),
-			],
-		)
-		"""
 
 		# Nozzle geometry: the fixed exit and free throat set the expansion ratio
 		self.add_subsystem(
@@ -96,7 +77,7 @@ class HybridEngineGroup(Group):
 			],
 		)
 
-		# Combustion chemistry & flame temperature
+		# Combustion chemistry and flame temperature
 		self.add_subsystem(
 			"Chemistry",
 			ChemComponent(chem=chem),
@@ -113,7 +94,7 @@ class HybridEngineGroup(Group):
 			],
 		)
 
-		# Nozzle performance & chamber pressure (choked, sonic throat)
+		# Nozzle performance and chamber pressure, from the choked throat
 		self.add_subsystem(
 			"Nozzle",
 			NozzleComponent(),
@@ -126,7 +107,6 @@ class HybridEngineGroup(Group):
 				("eta_cstar",       "chem_eta_cstar"),
 			],
 			promotes_outputs=[
-				("mach_throat",     "nozzle_throat_mach"),
 				("mach_exit",       "nozzle_exit_mach"),
 				("cstar",           "engine_cstar"),
 				("thrust",          "engine_thrust"),
@@ -137,7 +117,6 @@ class HybridEngineGroup(Group):
 				("p_exit",          "nozzle_exit_pressure"),
 				("mdot_prop",       "engine_mdot_prop"),
 				("eta_nozzle",      "nozzle_efficiency"),
-				("exit_half_angle", "nozzle_exit_half_angle"),
 			],
 		)
 		#endregion

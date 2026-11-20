@@ -1,48 +1,42 @@
 #region Imports
 from dataclasses import dataclass
-from typing import Sequence
+from typing      import Sequence
+
 from openmdao.api import Problem
 #endregion
 
 #region Data structures
 @dataclass(frozen=True)
 class DiameterSweepPoint:
-	diameter_m     : float
-	l_ox_tank_m    : float
-	l_press_tank_m : float
-	l_fuel_m       : float
-	l_nozzle_m     : float
-	l_prop_total_m : float
-	m_prop_kg      : float
-	m_dry_kg       : float
-	apogee_m       : float
-	success        : bool
+	diameter_m     : float  # Outer airframe diameter [m]
+	l_ox_tank_m    : float  # Oxidizer tank length [m]
+	l_press_tank_m : float  # Pressurant bottle length [m]
+	l_fuel_m       : float  # Fuel grain length [m]
+	l_nozzle_m     : float  # Nozzle divergent section length [m]
+	l_prop_total_m : float  # Sum of the four lengths above [m]
+	m_prop_kg      : float  # Burned propellant mass [kg]
+	m_dry_kg       : float  # Dry mass [kg]
+	apogee_m       : float  # 1D apogee [m]
+	success        : bool   # Whether the optimizer converged
 #endregion
 
 #region Sweep
-def sweep_diameters(
-	prob        : Problem,
-	diameters_m : Sequence[float],
-	quiet       : bool = True,
-) -> list[DiameterSweepPoint]:
+def sweep_diameters(prob: Problem) -> list[DiameterSweepPoint]:
 	"""
-	Re-optimize over a range of outer airframe diameters. The airframe wall
-	thickness is held at its configured value, so the bore grows with the
-	outer diameter. The tanks take the outer diameter
+	Re-optimize at each outer airframe diameter under [sweep] in the rocket
+	inputs. The airframe wall thickness is held at its configured value, so
+	the bore grows with the outer diameter. The tanks take the outer diameter
 	"""
-	results = []
 	d_inner_0 = prob.get_val("DesignVars.g_inner_diameter", units="m")[0]
 	d_outer_0 = prob.get_val("DesignVars.g_outer_diameter", units="m")[0]
 	wall      = d_outer_0 - d_inner_0
 
-	for d in diameters_m:
-		d_inner = d - wall
+	prob.driver.opt_settings["disp"] = False
 
-		prob.set_val("DesignVars.g_outer_diameter", d,       units="m")
-		prob.set_val("DesignVars.g_inner_diameter", d_inner, units="m")
-
-		if quiet: prob.driver.opt_settings["disp"] = False
-
+	results = []
+	for d in prob.cfg.cfg_sweep.outer_diameters_m:
+		prob.set_val("DesignVars.g_outer_diameter", d,        units="m")
+		prob.set_val("DesignVars.g_inner_diameter", d - wall, units="m")
 		prob.run()
 
 		gv = lambda name: float(prob.get_val(name)[0])
@@ -50,27 +44,19 @@ def sweep_diameters(
 		l_press  = gv("Propulsion.press_length")
 		l_fuel   = gv("Propulsion.fuel_length")
 		l_nozzle = gv("Propulsion.nozzle_length")
-		l_tot    = l_ox + l_press + l_fuel + l_nozzle
 
-		m_prop  = gv("OptimizationVars.o_propellant_mass")
-		m_dry   = gv("Mass.dry_mass")
-		apogee  = gv("apogee")
-		success = bool(prob.driver.result.success)
-
-		results.append(
-			DiameterSweepPoint(
-				diameter_m     = d,
-				l_ox_tank_m    = l_ox,
-				l_press_tank_m = l_press,
-				l_fuel_m       = l_fuel,
-				l_nozzle_m     = l_nozzle,
-				l_prop_total_m = l_tot,
-				m_prop_kg      = m_prop,
-				m_dry_kg       = m_dry,
-				apogee_m       = apogee,
-				success        = success,
-			)
-		)
+		results.append(DiameterSweepPoint(
+			diameter_m     = d,
+			l_ox_tank_m    = l_ox,
+			l_press_tank_m = l_press,
+			l_fuel_m       = l_fuel,
+			l_nozzle_m     = l_nozzle,
+			l_prop_total_m = l_ox + l_press + l_fuel + l_nozzle,
+			m_prop_kg      = gv("OptimizationVars.o_propellant_mass"),
+			m_dry_kg       = gv("Mass.dry_mass"),
+			apogee_m       = gv("apogee"),
+			success        = bool(prob.driver.result.success),
+		))
 
 	return results
 #endregion

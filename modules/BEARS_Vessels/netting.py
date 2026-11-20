@@ -1,28 +1,30 @@
-#region Clairaut
-def clairaut_angle_trig(r_boss: float, r_out: float) -> tuple[float, float]:
-	sin_a = r_boss / r_out
-	cos_sq = 1.0 - sin_a**2
-	tan_sq = sin_a**2 / cos_sq
-	return cos_sq, tan_sq
-#endregion
+"""
+Thin-wall thickness of a pressure-loaded cylinder layer, see
+doc/hoop_stress_derivation.pdf
+"""
 
-#region Sizing
-def size_composite_layer(
-	p_design   : float,
-	r_out      : float,
-	sigma_safe : float,
-	cos_sq     : float,
-	tan_sq     : float,
-	v_f        : float
-) -> float:
-	t_hel = (p_design * r_out) / (2.0 * sigma_safe * cos_sq)
+def size_composite_layer(p_design, r_out, sigma_safe, cos_sq, tan_sq, v_f):
+	"""
+	Thickness [m] of a filament-wound layer by netting theory: helical fibers
+	at angle alpha carry the axial load, hoop fibers the remaining hoop load
+
+	p_design   : pressure the layer has to hold [Pa]
+	r_out      : outer tank radius [m]
+	sigma_safe : allowable fiber stress [Pa]
+	cos_sq     : cos^2(alpha) of the helical winding angle [-]
+	tan_sq     : tan^2(alpha) of the helical winding angle [-]
+	v_f        : fiber volume fraction [-]
+	"""
+	t_hel  = (p_design * r_out) / (2.0 * sigma_safe * cos_sq)
 	t_hoop = (p_design * r_out / sigma_safe) * (1.0 - 0.5 * tan_sq)
 	return (t_hel + t_hoop) / v_f
 
-def size_metal_layer(
-	p_design   : float,
-	r_out      : float,
-	sigma_safe : float
-) -> float:
+def size_metal_layer(p_design, r_out, sigma_safe):
+	"""
+	Thickness [m] of an isotropic layer from the hoop stress
+
+	p_design   : pressure the layer has to hold [Pa]
+	r_out      : outer tank radius [m]
+	sigma_safe : allowable stress [Pa]
+	"""
 	return (p_design * r_out) / (sigma_safe + p_design)
-#endregion

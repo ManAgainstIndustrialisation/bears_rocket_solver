@@ -1,30 +1,43 @@
 #region Imports
 import numpy as np
 
-from typing          import TYPE_CHECKING
-from .helpers        import to_cea_reactant
-from ..Config        import CONSTANTS
-
-if TYPE_CHECKING: from .reac import Reactant
+from ..Config      import CONSTANTS, Propellants, Species
+from .backend_base import CombustionState
 #endregion
 
-class CEABackend:
-	"""NASA CEA v3 native Python backend with in-memory execution"""
+# CEA takes bar and kJ/mol, and gives kg/kmol
+J_PER_KJ                  = 1e3
+PA_TO_BAR                 = 1e-5
+KG_PER_KMOL_TO_KG_PER_MOL = 1e-3
 
-	def __init__(
-		self,
-		ox_reactants   : tuple["Reactant", ...],
-		fuel_reactants : tuple["Reactant", ...],
-	):
+def to_cea_reactant(species: Species):
+	"""NASA CEA reactant for a species"""
+	import cea
+
+	if species.enthalpy is None:
+		return cea.Reactant(
+			name        = species.name,
+			formula     = species.formula,
+			temperature = species.temperature,
+		)
+
+	return cea.Reactant(
+		name           = species.name,
+		formula        = species.formula,
+		enthalpy       = species.enthalpy / J_PER_KJ,
+		enthalpy_units = "kj/mol",
+		temperature    = species.temperature,
+	)
+
+class CEABackend:
+	"""NASA CEA v3 Python backend, solved in memory"""
+
+	def __init__(self, propellants: Propellants):
 		import cea
 		self._cea = cea
-		self.ox_reactants   = ox_reactants
-		self.fuel_reactants = fuel_reactants
 
-		all_cea = (
-			[to_cea_reactant(r) for r in ox_reactants]
-			+ [to_cea_reactant(r) for r in fuel_reactants]
-		)
+		reactants = (propellants.oxidizer, *propellants.fuels)
+		all_cea   = [to_cea_reactant(r) for r in reactants]
 
 		self._reac_mix = cea.Mixture(all_cea)
 		self._prod_mix = cea.Mixture(all_cea, products_from_reactants=True)
@@ -34,64 +47,36 @@ class CEABackend:
 			smooth_truncation = True,
 		)
 		self._solution = cea.RocketSolution(self._solver)
-		ox_tot   = sum(r.mass_fraction for r in ox_reactants)
-		fuel_tot = sum(r.mass_fraction for r in fuel_reactants)
-		self._ox_norm = np.array(
-			[r.mass_fraction / ox_tot for r in ox_reactants]
-		)
-		self._fuel_norm = np.array(
-			[r.mass_fraction / fuel_tot for r in fuel_reactants]
-		)
-		self._temps = np.array(
-			[r.temperature for r in ox_reactants]
-			+ [r.temperature for r in fuel_reactants]
-		)
-		self._last_state: tuple[float, float, float] | None = None
 
-	def _solve(self, pc_pa: float, mr: float, eps: float = 5.0):
-		state = (float(np.real(pc_pa)), float(np.real(mr)), float(np.real(eps)))
+		# Mass shares of each fuel within the fuel blend
+		fuel_total       = sum(f.mass_fraction for f in propellants.fuels)
+		self._fuel_share = np.array([f.mass_fraction / fuel_total for f in propellants.fuels])
+		self._temps      = np.array([r.temperature for r in reactants])
 
-		if self._last_state == state: return
+	def evaluate(self, pc_pa: float, mr: float, eps: float) -> CombustionState:
+		# CEA is real-valued only
+		pc_pa, mr, eps = float(np.real(pc_pa)), float(np.real(mr)), float(np.real(eps))
 
-		w_ox   = self._ox_norm   * (state[1] / (state[1] + 1.0))
-		w_fuel = self._fuel_norm * (1.0 / (state[1] + 1.0))
-
-		weights = np.concatenate([w_ox, w_fuel])
+		weights = np.concatenate([[mr / (mr + 1.0)], self._fuel_share / (mr + 1.0)])
 		h = self._reac_mix.calc_property(self._cea.ENTHALPY, weights, self._temps)
 
-		# CEA takes the chamber pressure in bar. The stations are the chamber
-		# [0], the throat [1] and the nozzle exit at area ratio eps [-1]
+		# The stations are the chamber [0], the throat [1] and the nozzle exit
+		# at area ratio eps [-1]
+		sol = self._solution
 		self._solver.solve(
-			self._solution, weights, state[0] * 1e-5,
-			supar=[state[2]], hc=h / self._cea.R, iac=True,
+			sol, weights, pc_pa * PA_TO_BAR,
+			supar=[eps], hc=h / self._cea.R, iac=True,
 		)
 
-		self._last_state = state
-
-	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
-		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
-		self._solve(pc_pa, mr, eps=5.0)
-		return float(self._solution.MW[0]), float(self._solution.gamma_s[0])
-
-	def get_tcomb(self, pc_pa: float, mr: float) -> float:
-		self._solve(pc_pa, mr, eps=5.0)
-		return float(self._solution.T[0])
-
-	def get_isp(
-		self,
-		pc_pa    : float,
-		mr       : float,
-		eps      : float,
-		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
-	) -> float:
-		self._solve(pc_pa, mr, eps=eps)
-
+		# Vacuum Isp less the ambient pressure term, at sea level
 		g0      = CONSTANTS.universal.standard_gravity
-		cstar   = float(self._solution.c_star[0])
-		isp_vac = float(self._solution.Isp_vacuum[-1]) / g0
+		p_amb   = CONSTANTS.atmosphere.sea_level_pressure
+		cstar   = float(sol.c_star[0])
+		isp_vac = float(sol.Isp_vacuum[-1]) / g0
 
-		if p_amb_pa > 0.0:
-			return isp_vac - (p_amb_pa * eps * cstar) / (pc_pa * g0)
-
-		return isp_vac
-
+		return CombustionState(
+			isp        = isp_vac - (p_amb * eps * cstar) / (pc_pa * g0),
+			t_chamber  = float(sol.T[0]),
+			molar_mass = float(sol.MW[0]) * KG_PER_KMOL_TO_KG_PER_MOL,
+			gamma      = float(sol.gamma_s[0]),
+		)

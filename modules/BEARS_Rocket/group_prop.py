@@ -1,9 +1,9 @@
 #region Imports
 from openmdao.api import Group
 
-from ..BEARS_Chem      import BEARS_Chem
-from ..BEARS_Materials import Gas
-from ..BEARS_Vessels   import LayeredWall
+from ..BEARS_Chem   import BEARS_Chem
+from ..BEARS_Thermo import PressurantThermoModel
+from ..Config       import Gas, Wall
 
 from .comp_split      import PropellantSplitComponent
 from .comp_tank_oxy   import OxidizerTankComponent
@@ -12,23 +12,17 @@ from .group_engine    import HybridEngineGroup
 #endregion
 
 class PropulsionGroup(Group):
+	"""Propulsion system: propellant split, oxidizer tank, pressurant bottle and engine"""
 
 	def initialize(self):
-		self.options.declare("chem", types=BEARS_Chem)
-
-		self.options.declare("ox_wall_material",    types=LayeredWall)
-		self.options.declare("press_wall_material", types=LayeredWall)
-		self.options.declare("press_gas",           types=Gas)
-		self.options.declare("press_thermo_model",  default=None, allow_none=True)
+		self.options.declare("chem",         types=BEARS_Chem)             # Chemistry of the propellant combination
+		self.options.declare("ox_wall",      types=Wall)                   # Oxidizer tank wall layup
+		self.options.declare("press_wall",   types=Wall)                   # Pressurant bottle wall layup
+		self.options.declare("press_gas",    types=Gas)                    # Pressurant gas
+		self.options.declare("press_thermo", types=PressurantThermoModel)  # Pressurant blowdown model
 
 	def setup(self):
-		chem       = self.options["chem"]
-		ox_wall    = self.options["ox_wall_material"]
-		press_wall = self.options["press_wall_material"]
-		press_gas  = self.options["press_gas"]
-		press_thm  = self.options["press_thermo_model"]
-
-		self.set_input_defaults("tank_pressure", val=70e5, units="Pa")
+		chem = self.options["chem"]
 
 		#region Subsystems
 		self.add_subsystem(
@@ -40,21 +34,16 @@ class PropulsionGroup(Group):
 			],
 		)
 
-		# NOTE: we put the oxidizer tank component here first before the
-		#       pressurant tank component for it to evaluate before its
-		#       `v_fluid` for the pressurant component to use
+		# The oxidizer tank comes before the pressurant bottle, which sizes
+		# itself to the oxidizer volume
 		self.add_subsystem(
 			"OxidizerTank",
-			OxidizerTankComponent(
-				rho_ox=chem.rho_ox,
-				wall_material=ox_wall,
-			),
+			OxidizerTankComponent(rho_ox=chem.rho_ox, wall=self.options["ox_wall"]),
 			promotes_inputs=[
 				("p_tank_max",    "tank_pressure"),
 				("diam_out",      "tank_diam"),
 				("ullage_frac",   "tank_ullage_frac"),
 				("safety_factor", "tank_safety_factor"),
-				("r_boss",        "tank_boss_opening"),
 				("boss_len_fwd",  "tank_boss_len_fwd"),
 				("boss_len_aft",  "tank_boss_len_aft"),
 			],
@@ -63,23 +52,20 @@ class PropulsionGroup(Group):
 				("l_tank",     "tank_length"),
 				("v_internal", "tank_volume"),
 				("t_wall",     "tank_wall_thickness"),
-				("t_liner",    "tank_liner_thickness"),
-				("t_wrap",     "tank_wrap_thickness"),
 			],
 		)
 
 		self.add_subsystem(
 			"PressurantTank",
 			PressurantTankComponent(
-				wall_material = press_wall,
-				gas           = press_gas,
-				thermo_model  = press_thm,
+				wall         = self.options["press_wall"],
+				gas          = self.options["press_gas"],
+				thermo_model = self.options["press_thermo"],
 			),
 			promotes_inputs=[
 				("p_tank_max",    "press_pressure"),
 				("diam_out",      "press_diam"),
 				("safety_factor", "press_safety_factor"),
-				("r_boss",        "press_boss_opening"),
 				("boss_len_fwd",  "press_boss_len_fwd"),
 				("boss_len_aft",  "press_boss_len_aft"),
 				("p_reg_margin",  "press_reg_margin"),
@@ -100,21 +86,21 @@ class PropulsionGroup(Group):
 			"HybridEngine",
 			HybridEngineGroup(chem=chem),
 			promotes_inputs=[
-				("engine_feed_pressure",   "tank_pressure"),
-				("engine_prop_mass_init",  "prop_prop_mass_init"),
-				("engine_mixture_ratio",   "prop_mixture_ratio"),
-				("injector_area",          "injector_area"),
-				("injector_cd",            "injector_cd"),
-				("fuel_port_diam",         "fuel_port_diam"),
-				("fuel_reg_exponent",      "fuel_reg_exponent"),
-				("fuel_reg_ref",           "fuel_reg_ref"),
-				("fuel_oxy_mass_flux_ref", "fuel_oxy_mass_flux_ref"),
-				("nozzle_exit_diam",       "nozzle_exit_diam"),
-				("nozzle_throat_area",     "nozzle_throat_area"),
+				("engine_feed_pressure",      "tank_pressure"),
+				("engine_prop_mass_init",     "prop_prop_mass_init"),
+				("engine_mixture_ratio",      "prop_mixture_ratio"),
+				("injector_area",             "injector_area"),
+				("injector_cd",               "injector_cd"),
+				("fuel_port_diam",            "fuel_port_diam"),
+				("fuel_reg_exponent",         "fuel_reg_exponent"),
+				("fuel_reg_ref",              "fuel_reg_ref"),
+				("fuel_oxy_mass_flux_ref",    "fuel_oxy_mass_flux_ref"),
+				("nozzle_exit_diam",          "nozzle_exit_diam"),
+				("nozzle_throat_area",        "nozzle_throat_area"),
 				("conical_nozzle_half_angle", "conical_nozzle_half_angle"),
-				("nozzle_eta_friction",    "nozzle_eta_friction"),
-				("fuel_eta_reg",           "fuel_eta_reg"),
-				("chem_eta_cstar",         "chem_eta_cstar"),
+				("nozzle_eta_friction",       "nozzle_eta_friction"),
+				("fuel_eta_reg",              "fuel_eta_reg"),
+				("chem_eta_cstar",            "chem_eta_cstar"),
 			],
 			promotes_outputs=[
 				("engine_thrust",           "prop_thrust"),
@@ -129,23 +115,13 @@ class PropulsionGroup(Group):
 				("fuel_length",             "fuel_length"),
 				("fuel_grain_diam",         "fuel_grain_diam"),
 				("fuel_regression_rate",    "fuel_regression_rate"),
-				("fuel_mass",               "fuel_mass"),
-
-				#("igniter_lining_thickness", "igniter_lining_thickness"),
-				#("igniter_inner_diam",       "igniter_inner_diam"),
-				#("igniter_port_blockage",    "igniter_port_blockage"),
-				#("igniter_thermite_mass",    "igniter_thermite_mass"),
-				#("igniter_pad_count",        "igniter_pad_count"),
-				#("igniter_pad_spacing",      "igniter_pad_spacing"),
-				#("igniter_thermal_margin",   "igniter_thermal_margin"),
 			],
 		)
 		#endregion
 
 		#region Connections
-		self.connect("PropSplit.m_ox",        "OxidizerTank.m_oxy")
-		self.connect("OxidizerTank.v_fluid",  "PressurantTank.v_ox_displace")
-		self.connect("tank_pressure",         "PressurantTank.p_ox")
-		self.connect("tank_ullage_frac",      "PressurantTank.ox_ullage_frac")
+		self.connect("PropSplit.m_ox",       "OxidizerTank.m_oxy")
+		self.connect("OxidizerTank.v_fluid", "PressurantTank.v_ox_displace")
+		self.connect("tank_pressure",        "PressurantTank.p_ox")
+		self.connect("tank_ullage_frac",     "PressurantTank.ox_ullage_frac")
 		#endregion
-

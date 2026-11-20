@@ -1,63 +1,58 @@
-#region imports
-import numpy   as np
+#region Imports
+from importlib.util import find_spec
 
-try:
-	import isacalc as isa
-except ImportError:
-	isa = None
+import numpy as np
 
-from ..Config import CONSTANTS, AIR
+from ..Config import CONSTANTS, Air
 #endregion
 
-def atm_isa(h):
-	std_atm = isa.Atmosphere()
-	val = std_atm.calculate(h)
-
-	# T, P, rho, a
-	return val[1], val[2], val[3], val[4]
-
-def atm_standalone(h):
-	"""
-	Standalone logic for ISA atmosphere
-
-	NOTE: AI-generated placeholder
-	"""
-
-	isa = CONSTANTS.atmosphere
-	air = AIR
-	g0  = CONSTANTS.universal.standard_gravity
-
-	T0 = isa.sea_level_temperature
-	L  = isa.lapse_rate
-
-	T   = np.maximum(T0 - L * h, isa.tropopause_temperature)
-	R   = CONSTANTS.universal.molar_gas_constant
-	P   = isa.sea_level_pressure * (T / T0)**(g0 * air.molar_mass / (R * L))
-	rho = P / (air.r_specific * T)
-	a   = np.sqrt(air.gamma * air.r_specific * T)
-
-	return T, P, rho, a
-
-model_map = {
-	"isacalc": atm_isa,
-	"standalone": atm_standalone
-}
-
-atmosphere_models = list(model_map.keys())
-
 class BEARS_Atm:
-	def __init__(self, model: str = "auto"):
-		match model:
-			case "auto":
-				self.model = "isacalc" if isa is not None else "standalone"
-			case "isacalc":
-				if isa is None:
-					raise ImportError("isacalc package is not installed")
-				self.model = model
-			case "standalone":
-				self.model = model
-			case _:
-				raise ValueError(f"Unknown atmosphere model: '{model}'")
+	"""
+	Static atmosphere against altitude. Calling it with an altitude [m] gives
+	(temperature [K], pressure [Pa], density [kg/m^3], speed of sound [m/s])
+	"""
 
-	def __call__(self, altitude: float):
-		return model_map[self.model](altitude)
+	def __init__(self, model: str, air: Air):
+		"""`model` is the [models] atmosphere choice: auto, isacalc or standalone"""
+		if model == "auto":
+			model = "isacalc" if find_spec("isacalc") else "standalone"
+
+		self.air = air  # Air properties for the standalone model
+
+		match model:
+			case "isacalc":
+				# isacalc carries its own ISA constants
+				import isacalc
+				self._isa  = isacalc.Atmosphere()
+				self._call = self._isacalc
+			case "standalone":
+				self._call = self._standalone
+
+	def __call__(self, altitude):
+		return self._call(altitude)
+
+	def _isacalc(self, h):
+		val = self._isa.calculate(h)
+		return val[1], val[2], val[3], val[4]
+
+	def _standalone(self, h):
+		"""
+		ISA troposphere
+
+		TODO: AI-generated placeholder, only valid up to the tropopause (11 km):
+		above it the temperature is held but the pressure still follows the
+		troposphere law
+		"""
+		isa = CONSTANTS.atmosphere
+		g0  = CONSTANTS.universal.standard_gravity
+		R   = CONSTANTS.universal.molar_gas_constant
+		air = self.air
+
+		T0, L = isa.sea_level_temperature, isa.lapse_rate
+
+		T   = np.maximum(T0 - L * h, isa.tropopause_temperature)
+		P   = isa.sea_level_pressure * (T / T0)**(g0 * air.molar_mass / (R * L))
+		rho = P / (air.r_specific * T)
+		a   = np.sqrt(air.gamma * air.r_specific * T)
+
+		return T, P, rho, a

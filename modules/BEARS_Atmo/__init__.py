@@ -1,1 +1,1 @@
-from .atmo import BEARS_Atm, atmosphere_models
+from .atmo import BEARS_Atm

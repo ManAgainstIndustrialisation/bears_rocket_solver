@@ -1,51 +1,40 @@
 #region Imports
 from .comp_tank import TankComponent
 
-from ..BEARS_Materials import Gas
-from ..BEARS_Thermo    import create_pressurant_thermo
+from ..Config       import Gas
+from ..BEARS_Thermo import PressurantThermoModel
 #endregion
 
 class PressurantTankComponent(TankComponent):
+	"""Pressurant bottle, sized to push the oxidizer out of its tank"""
 
 	def initialize(self):
 		super().initialize()
-		self.options.declare("gas",          types=Gas)
-		self.options.declare("thermo_model", default=None, allow_none=True)
-
-	def setup_fluid_inputs(self):
-		self.add_input("v_ox_displace",  val=0.01,   units="m**3")
-		self.add_input("p_ox",           val=70e5,   units="Pa")
-
-		# Regulator pressure margin
-		self.add_input("p_reg_margin",   val=20e5,   units="Pa")
-		self.add_input("ox_ullage_frac", val=0.10)
-
-		# Saturation (vapor) pressure of the liquid oxidizer
-		# Used for pad gas sizing (Dalton's law)
-		self.add_input("p_sat",          val=60e5,   units="Pa")
-
-		# Initial bottle (ambient) temperature
-		self.add_input("t_ambient",      val=303.15, units="K")
+		self.options.declare("gas",          types=Gas)                    # Pressurant gas
+		self.options.declare("thermo_model", types=PressurantThermoModel)  # Blowdown model
 
 	def setup(self):
 		super().setup()
 
-		# Thermodynamic outputs
-		self.add_output("m_press",     val=1.2,   units="kg")
-		self.add_output("rho_press",   val=344.0, units="kg/m**3")
-		self.add_output("m_pad",       val=0.01,  units="kg")
-		self.add_output("m_burn",      val=0.30,  units="kg")
-		self.add_output("f_delivered", val=0.43)
+		self.add_input("v_ox_displace",  val=0.01,   units="m**3")  # Oxidizer volume the gas replaces
+		self.add_input("p_ox",           val=70e5,   units="Pa")    # Regulated oxidizer tank pressure
+		self.add_input("p_reg_margin",   val=20e5,   units="Pa")    # Bottle pressure left over p_ox at burnout
+		self.add_input("ox_ullage_frac", val=0.10)                  # Oxidizer tank ullage fraction at loading [-]
+		self.add_input("p_sat",          val=60e5,   units="Pa")    # Oxidizer vapor pressure, for the pad gas (Dalton's law)
+		self.add_input("t_ambient",      val=303.15, units="K")     # Bottle temperature at fill
 
-	def _get_thermo(self):
-		return self.options["thermo_model"] or create_pressurant_thermo("auto")
+		self.add_output("m_press",     val=1.2,   units="kg")       # Pressurant mass to load, margin included
+		self.add_output("rho_press",   val=344.0, units="kg/m**3")  # Pressurant density in the full bottle
+		self.add_output("m_pad",       val=0.01,  units="kg")       # Gas that tops the ullage up above the vapor pressure
+		self.add_output("m_burn",      val=0.30,  units="kg")       # Gas that replaces the drained oxidizer
+		self.add_output("f_delivered", val=0.43)                    # Share of the bottle mass that leaves it before burnout [-]
 
 	def setup_partials(self):
-		method = "cs" if self._get_thermo().supports_complex_step else "fd"
+		method = "cs" if self.options["thermo_model"].supports_complex_step else "fd"
 		self.declare_partials("*", "*", method=method)
 
 	def compute(self, inputs, outputs):
-		res = self._get_thermo().compute(
+		res = self.options["thermo_model"].compute(
 			gas      = self.options["gas"],
 			p_bottle = inputs["p_tank_max"][0],
 			p_ox     = inputs["p_ox"][0],

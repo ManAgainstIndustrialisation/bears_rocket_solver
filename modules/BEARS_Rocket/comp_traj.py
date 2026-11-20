@@ -8,44 +8,37 @@ from ..BEARS_Atmo import BEARS_Atm
 from ..Config     import CONSTANTS, AerodynamicsConfig
 #endregion
 
-g = CONSTANTS.universal.standard_gravity # Standard gravity [m/s^2]
+g = CONSTANTS.universal.standard_gravity  # Standard gravity [m/s^2]
+
+# Integration settings of the flight phases
+RTOL, ATOL   = 1e-7, 1e-9
+COAST_SPAN_S = 1000.0  # Longest coast to integrate before apogee [s]
 
 #region Ballistic functions
-def F_d(
-	v    : float,
-	diam : float,
-	rho  : float,
-	a    : float,
-	aero : AerodynamicsConfig,
-) -> float:
-	"""Drag force calculator"""
-
-	area = np.pi * (diam / 2.0)**2.0
-	mach = abs(v) / a
-
-	# TODO: Better-founded C_d model, the table is an AI-generated placeholder
-	cd = np.interp(mach, aero.drag_mach, aero.drag_cd)
-
-	drag = 0.5 * rho * v**2 * cd * area
-	return drag
-
-def ballistic_apogee(
-	thrust : float,
-	isp    : float,
-	m_i    : float,
-	m_prop : float,
-	diam   : float,
-	atm    : BEARS_Atm,
-	aero   : AerodynamicsConfig,
-) -> tuple[float, float]:
+def drag_force(v, diam, rho, a, aero: AerodynamicsConfig):
 	"""
-	Simple ballistic apogee calculator.
-
-	We use a two-step boost+coast process with separate dynamics and integrators
-	in order to avoid a sharp discontinuity in the integrator.
+	Drag [N] at speed `v` [m/s] for the airframe diameter `diam` [m], air
+	density `rho` [kg/m^3] and speed of sound `a` [m/s]
 	"""
-	mdot = thrust / (isp * g)
-	t_burn = m_prop / mdot
+	area = np.pi * (diam / 2.0)**2
+	cd   = np.interp(abs(v) / a, aero.drag_mach, aero.drag_cd)
+	return 0.5 * rho * v**2 * cd * area
+
+def ballistic_apogee(thrust, isp, m_i, m_prop, diam, atm: BEARS_Atm, aero: AerodynamicsConfig):
+	"""
+	Burn time [s] and apogee [m] of a vertical 1D flight
+
+	thrust : constant thrust [N]
+	isp    : constant Isp [s]
+	m_i    : liftoff mass [kg]
+	m_prop : burned propellant mass [kg]
+	diam   : airframe diameter for the drag area [m]
+
+	The boost and the coast are integrated separately, which avoids the jump
+	in the dynamics at burnout
+	"""
+	mdot      = thrust / (isp * g)
+	t_burn    = m_prop / mdot
 	m_burnout = m_i - m_prop
 
 	def dynamics_boost(t, y):
@@ -53,79 +46,60 @@ def ballistic_apogee(
 		m = m_i - mdot * t
 
 		_, _, rho, a = atm(max(0.0, h))
-		f_net = thrust - F_d(v, diam, rho, a, aero)
+		f_net = thrust - drag_force(v, diam, rho, a, aero)
 
+		# Held on the pad until the thrust lifts the rocket
 		if h <= 0.0 and f_net / m <= g:
-			dh_dt, dv_dt = max(0.0, v), 0.0
-		else:
-			dh_dt, dv_dt = v, (f_net / m) - g
-
-		return [dh_dt, dv_dt]
+			return [max(0.0, v), 0.0]
+		return [v, (f_net / m) - g]
 
 	def dynamics_coast(t, y):
 		h, v = y
-
 		_, _, rho, a = atm(max(0.0, h))
+		return [v, -drag_force(v, diam, rho, a, aero) / m_burnout - g]
 
-		dh_dt = v
-		dv_dt = -F_d(v, diam, rho, a, aero) / m_burnout - g
-		return [dh_dt, dv_dt]
-
-	# A SciPy integration event that captures the moment when velocity reaches 0
+	# Apogee is where the climb speed falls through zero
 	def apogee_event(t, y): return y[1]
-	apogee_event.terminal = True
+	apogee_event.terminal  = True
 	apogee_event.direction = -1
 
-	# Integration steps
 	sol_boost = solve_ivp(
-		dynamics_boost,
-		t_span=(0.0, t_burn),
-		y0=[0.0, 0.0],
-		method="RK45",
-		rtol=1e-7,
-		atol=1e-9,
+		dynamics_boost, t_span=(0.0, t_burn), y0=[0.0, 0.0],
+		method="RK45", rtol=RTOL, atol=ATOL,
 	)
-
-	h_burnout = sol_boost.y[0][-1]
-	v_burnout = sol_boost.y[1][-1]
 
 	sol_coast = solve_ivp(
-		dynamics_coast,
-		t_span=(0, 1000),
-		y0=[h_burnout, v_burnout],
-		method="RK45",
-		rtol=1e-7,
-		atol=1e-9,
-		events=apogee_event,
+		dynamics_coast, t_span=(0.0, COAST_SPAN_S), y0=sol_boost.y[:, -1],
+		method="RK45", rtol=RTOL, atol=ATOL, events=apogee_event,
 	)
 
-	apogee = sol_coast.y[0][-1]
-	return t_burn, apogee
+	return t_burn, sol_coast.y[0][-1]
 #endregion
 
 class TrajectoryComponent(ExplicitComponent):
+	"""
+	Vertical 1D flight with drag, at constant thrust and Isp
+
+	The ODE integration is real-valued only, so the apogee partials are finite
+	differences. The burn time partials are exact
+	"""
 
 	def initialize(self):
-		self.options.declare("atm",  types=BEARS_Atm)
-		self.options.declare("aero", types=AerodynamicsConfig)
+		self.options.declare("atm",  types=BEARS_Atm)           # Atmosphere model
+		self.options.declare("aero", types=AerodynamicsConfig)  # Drag coefficient table
 
 	def setup(self):
-		# Propulsion profile
-		self.add_input("thrust",          val=1000.0, units="N")
-		self.add_input("isp",             val=200.0,  units="s")
+		self.add_input("thrust",          val=1000.0, units="N")   # Constant thrust
+		self.add_input("isp",             val=200.0,  units="s")   # Constant Isp
+		self.add_input("initial_mass",    val=15.0,   units="kg")  # Liftoff mass
+		self.add_input("propellant_mass", val=5.0,    units="kg")  # Burned propellant mass
+		self.add_input("diameter",        val=0.125,  units="m")   # Airframe diameter for the drag area
 
-		# Rocket parameters
-		self.add_input("initial_mass",    val=15.0, units="kg")
-		self.add_input("propellant_mass", val=5.0,  units="kg")
-		self.add_input("diameter",        val=0.5,  units="m")
-
-		self.add_output("apogee",         val=3000.0, units="m")
-		self.add_output("burn_time",      val=3.0,    units="s")
+		self.add_output("apogee",    val=3000.0, units="m")  # Peak altitude of the 1D flight
+		self.add_output("burn_time", val=3.0,    units="s")  # Engine burn time
 
 	def setup_partials(self):
-		self.declare_partials(
-			"burn_time", ["thrust", "isp", "propellant_mass"]
-		)
+		self.declare_partials("burn_time", ["thrust", "isp", "propellant_mass"])
 
 		self.declare_partials(
 			"apogee",
@@ -139,31 +113,20 @@ class TrajectoryComponent(ExplicitComponent):
 		isp    = inputs["isp"][0]
 		m_prop = inputs["propellant_mass"][0]
 
-		# Provide exact partial derivatives:
-		#
-		#   t_burn = ( m_prop * isp * g ) / thrust
-		#
-
-		d_tburn_mprop = (isp * g) / thrust
-		d_tburn_isp   = m_prop * g / thrust
-		d_tburn_thr   = -( m_prop * isp * g ) / (thrust**2)
-
-		partials["burn_time", "propellant_mass"] = d_tburn_mprop
-		partials["burn_time", "isp"]             = d_tburn_isp
-		partials["burn_time", "thrust"]          = d_tburn_thr
+		# t_burn = m_prop * isp * g / thrust
+		partials["burn_time", "propellant_mass"] = isp * g / thrust
+		partials["burn_time", "isp"]             = m_prop * g / thrust
+		partials["burn_time", "thrust"]          = -m_prop * isp * g / thrust**2
 
 	def compute(self, inputs, outputs):
-		atm  = self.options["atm"]
-		aero = self.options["aero"]
-
-		thrust = inputs["thrust"][0]
-		isp    = inputs["isp"][0]
-		m_i    = inputs["initial_mass"][0]
-		m_prop = inputs["propellant_mass"][0]
-		diam   = inputs["diameter"][0]
-
 		burn_time, apogee = ballistic_apogee(
-			thrust, isp, m_i, m_prop, diam, atm, aero
+			inputs["thrust"][0],
+			inputs["isp"][0],
+			inputs["initial_mass"][0],
+			inputs["propellant_mass"][0],
+			inputs["diameter"][0],
+			self.options["atm"],
+			self.options["aero"],
 		)
 
 		outputs["burn_time"] = burn_time

@@ -42,7 +42,7 @@ python -m venv env
 pip install .                   # Add ".[verification]" for pydot, graphviz, mypy
 
 python solver.py                # Optimize and write the outputs
-python solver.py --sweep        # Also re-optimize over a range of diameters
+python solver.py --sweep        # Also re-optimize over the [sweep] diameters
 ```
 
 Results are printed to the terminal, all model variables are written to
@@ -52,7 +52,7 @@ Results are printed to the terminal, all model variables are written to
 
 | File | Contents |
 | ---- | -------- |
-| `inputs/rocket_inputs.toml` | Design inputs: targets, airframe diameters, drag curve, tanks, injector, fuel, nozzle, model choices, efficiencies and the optimizer starting point |
+| `inputs/rocket_inputs.toml` | Design inputs: targets, airframe diameters, drag curve, tanks with their wall and gas choice, injector, fuel, nozzle, model choices, efficiencies, optimizer start values and bounds, constraint limits, acceptance checks and the diameter sweep |
 | `inputs/materials.toml` | Material properties: air, structural materials, tank wall layups, pressurant gases, propellant reactants |
 | `inputs/constants.toml` | Physical constants: universal constants, thermochemical reference state, standard atmosphere |
 
@@ -91,14 +91,13 @@ maximum burn time and the grain fitting the bore.
 solver.py                # Entry point
 inputs/                  # Input TOML files
 modules/
-├── Config/              # Input loading, records and validation
+├── Config/              # Input records, one module per input file, each checking its own values
 ├── BEARS_Rocket/        # OpenMDAO components (comp_), groups (group_), problem (prob_)
 ├── BEARS_Chem/          # Propellant chemistry, CEA and RocketCEA backends
 ├── BEARS_Isentropic/    # Isentropic flow relations
 ├── BEARS_Atmo/          # Standard atmosphere
 ├── BEARS_Thermo/        # Pressurant blowdown thermodynamics
-├── BEARS_Vessels/       # Pressure vessel walls, domes and volumes
-└── BEARS_Materials/     # Material and gas property classes
+└── BEARS_Vessels/       # Pressure vessel walls, domes and volumes
 outputs/                 # Solver output tables
 figures/                 # Model graphs
 doc/                     # Derivations and reports
@@ -120,9 +119,13 @@ doc/                     # Derivations and reports
 The backend for each model is chosen under `[models]` in
 `inputs/rocket_inputs.toml`.
 
+## Citations and Credit to useful Papers/resources
+- [Glenn Resaerch Center](https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/isentrop/): Isentropic Calculation source
+- [NASA CEA Tutorial](https://ntrs.nasa.gov/api/citations/20240016039/downloads/CEA_SciTech_2025_Leader.pdf): NASA CEA Explanation and Tutorial
+
 ## TODO
 - [ ] Fuel Grain calculation Module
-- [ ] EUROC Requirements envelope for all output and input variables
+- [ ] rework checks to physical checks and EUROC Requirements envelope
 - [ ] Igniter calculation Module
 - [ ] use/integrate rocketpal for Drag and trajectory calculations
 - [ ] Proper mass model for the subcomponent assemblies

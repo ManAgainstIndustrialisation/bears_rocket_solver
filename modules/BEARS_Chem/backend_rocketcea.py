@@ -1,60 +1,61 @@
 #region Imports
-from typing import TYPE_CHECKING
-
-from ..Config import CONSTANTS
-
-if TYPE_CHECKING: from .reac import Reactant
+from ..Config      import CONSTANTS, Propellants, Species
+from .backend_base import CombustionState
 #endregion
 
-PA_TO_PSIA = 1.450377e-4 # 1 Pa = 1.45038e-4 psia
+# RocketCEA works in US customary units
+PA_TO_PSIA                = 1.450377e-4
+RANKINE_TO_KELVIN         = 5.0 / 9.0
+KG_PER_KMOL_TO_KG_PER_MOL = 1e-3
+J_PER_KJ                  = 1e3
+
+def species_card(species: Species, wt_percent: float) -> str:
+	"""
+	CEA input card of one species at `wt_percent` of its blend, see
+	<https://rocketcea.readthedocs.io/en/latest/std_examples.html>
+	"""
+	if species.enthalpy is None:
+		raise ValueError(
+			f"RocketCEA needs an enthalpy for the custom species '{species.name}'"
+		)
+
+	atoms = " ".join(f"{atom} {float(count)}" for atom, count in species.formula.items())
+	return (
+		f"{species.role} {species.name} {atoms} wt%={wt_percent}\n"
+		f"h,kj/mol={species.enthalpy / J_PER_KJ} t(k)={species.temperature}"
+	)
+
+def blend_card(blend: tuple[Species, ...]) -> str:
+	"""CEA input card of a blend, with weights that add up to 100 % as CEA needs"""
+	total = sum(s.mass_fraction for s in blend)
+	return "\n".join(species_card(s, (s.mass_fraction / total) * 100.0) for s in blend)
 
 class RocketCEABackend:
-	"""RocketCEA backend wrapping Fortran CEA2"""
+	"""RocketCEA backend, wrapping the Fortran CEA2"""
 
-	def __init__(
-		self,
-		ox_reactants   : tuple["Reactant", ...],
-		fuel_reactants : tuple["Reactant", ...],
-	):
+	def __init__(self, propellants: Propellants):
 		from rocketcea.cea_obj     import CEA_Obj, add_new_fuel, add_new_oxidizer
 		from rocketcea.input_cards import oxCards, fuelCards
-		from .helpers              import gencard
 
-		reac_cards = {"oxid": oxCards, "fuel": fuelCards}
-		rnames : dict[str, str] = {}
-		for rtype, rlist in [("oxid", ox_reactants), ("fuel", fuel_reactants)]:
-			rname = "_".join([reac.name for reac in rlist])
-			if rname not in reac_cards[rtype]:
-				card = gencard(rlist)
-				if rtype == "fuel": add_new_fuel(rname, card)
-				else:               add_new_oxidizer(rname, card)
-			rnames[rtype] = rname
+		# A blend RocketCEA does not know yet is added under the joined names
+		ox_blend  = (propellants.oxidizer,)
+		ox_name   = "_".join(s.name for s in ox_blend)
+		fuel_name = "_".join(s.name for s in propellants.fuels)
+		if ox_name   not in oxCards:   add_new_oxidizer(ox_name, blend_card(ox_blend))
+		if fuel_name not in fuelCards: add_new_fuel(fuel_name, blend_card(propellants.fuels))
 
-		self._cea = CEA_Obj(oxName=rnames["oxid"], fuelName=rnames["fuel"])
+		self._cea = CEA_Obj(oxName=ox_name, fuelName=fuel_name)
 
-	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
-		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
-		mw, gamma = self._cea.get_Chamber_MolWt_gamma(Pc=pc_pa * PA_TO_PSIA, MR=mr)
-		return float(mw), float(gamma)
+	def evaluate(self, pc_pa: float, mr: float, eps: float) -> CombustionState:
+		pc_psia    = pc_pa * PA_TO_PSIA
+		p_amb_psia = CONSTANTS.atmosphere.sea_level_pressure * PA_TO_PSIA
 
-	def get_tcomb(self, pc_pa: float, mr: float) -> float:
-		return self._cea.get_Tcomb(Pc=pc_pa * PA_TO_PSIA, MR=mr) * (5.0 / 9.0)
+		isp, _    = self._cea.estimate_Ambient_Isp(Pc=pc_psia, MR=mr, eps=eps, Pamb=p_amb_psia)
+		mw, gamma = self._cea.get_Chamber_MolWt_gamma(Pc=pc_psia, MR=mr)
 
-	def get_isp(
-		self,
-		pc_pa    : float,
-		mr       : float,
-		eps      : float,
-		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
-	) -> float:
-		pc_psia = pc_pa * PA_TO_PSIA
-
-		if p_amb_pa > 0.0:
-			isp, _ = self._cea.estimate_Ambient_Isp(
-				Pc=pc_psia, MR=mr, eps=eps, Pamb=p_amb_pa * PA_TO_PSIA
-			)
-			ret = float(isp)
-		else:
-			ret = float(self._cea.get_Isp(Pc=pc_psia, MR=mr, eps=eps))
-
-		return ret
+		return CombustionState(
+			isp        = float(isp),
+			t_chamber  = float(self._cea.get_Tcomb(Pc=pc_psia, MR=mr)) * RANKINE_TO_KELVIN,
+			molar_mass = float(mw) * KG_PER_KMOL_TO_KG_PER_MOL,
+			gamma      = float(gamma),
+		)

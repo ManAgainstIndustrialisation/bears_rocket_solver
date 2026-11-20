@@ -14,18 +14,11 @@ import numpy as np
 import openmdao.utils.variable_table as vt
 import openmdao.core.system          as sys_mod
 
-from modules.Config import (
-	load_configs,
-	load_reactants,
-	load_materials,
-	load_fluids,
-)
-
-from modules.BEARS_Atmo      import BEARS_Atm
-from modules.BEARS_Chem      import BEARS_Chem
-from modules.BEARS_Materials import Material, Gas
-from modules.BEARS_Vessels   import LayeredWall
-from modules.BEARS_Rocket    import (
+from modules.Config       import load_rocket_inputs, load_materials
+from modules.BEARS_Atmo   import BEARS_Atm
+from modules.BEARS_Chem   import BEARS_Chem
+from modules.BEARS_Thermo import create_pressurant_thermo
+from modules.BEARS_Rocket import (
 	RocketLaunchProblem,
 	sweep_diameters,
 	format_sweep_org_table,
@@ -77,7 +70,7 @@ def main():
 	parser.add_argument(
 		"--sweep",
 		action = "store_true",
-		help   = "run an airframe diameter parameter sweep after the solve",
+		help   = "re-optimize over the [sweep] airframe diameters after the solve",
 	)
 	args = parser.parse_args()
 
@@ -89,53 +82,37 @@ def main():
 	BEARS_Chem.set_work_dir(os.path.join(work_dir, "RocketCEA"))
 	#endregion
 
-	#region Inputs
-	cfg_rocket = load_configs("inputs/rocket_inputs.toml")
-	cfg_reac   = load_reactants("inputs/materials.toml")
+	#region Inputs and models
+	cfg = load_rocket_inputs("inputs/rocket_inputs.toml")
+	mat = load_materials("inputs/materials.toml")
 
-	atm  = BEARS_Atm(cfg_rocket.cfg_models.atmosphere)
-	chem = BEARS_Chem.from_config(
-		cfg_reac, backend=cfg_rocket.cfg_models.chemistry
-	)
-
-	cfg_mat    = load_materials("inputs/materials.toml")
-	cfg_fluids = load_fluids("inputs/materials.toml")
-
-	materials = {m.id: Material.from_config(m) for m in cfg_mat.materials}
-	gases     = {g.id: Gas.from_config(g) for g in cfg_fluids.gases}
-	walls     = {
-		w.id: LayeredWall.from_config(w, materials) for w in cfg_mat.walls
-	}
-
-	copv_ox    = walls["copv_ox"]
-	copv_press = walls["copv_press"]
-	press_gas  = gases["N2"]
+	models = cfg.cfg_models
+	ox     = cfg.cfg_oxy_tank
+	pr     = cfg.cfg_press_tank
 	#endregion
 
 	#region Rocket optimization
-	prob_rocket = RocketLaunchProblem(
-		atm                 = atm,
-		chem                = chem,
-		cfg_rocket          = cfg_rocket,
-		ox_wall_material    = copv_ox,
-		press_wall_material = copv_press,
-		press_gas           = press_gas,
-		reports             = True,
-		work_dir            = work_dir,
+	prob = RocketLaunchProblem(
+		cfg          = cfg,
+		atm          = BEARS_Atm(models.atmosphere, mat.air),
+		chem         = BEARS_Chem(mat.propellants, models.chemistry),
+		ox_wall      = mat.wall(ox.wall),
+		press_wall   = mat.wall(pr.wall),
+		press_gas    = mat.gas(pr.gas),
+		press_thermo = create_pressurant_thermo(models.pressurant_thermo, pr.mass_margin),
+		reports      = True,
+		work_dir     = work_dir,
 	)
 
-	prob_rocket.setup()
-	prob_rocket.run()
-	prob_rocket.report()
+	prob.setup()
+	prob.run()
+	prob.report()
 	#endregion
 
 	#region Diameter sweep
 	if args.sweep:
-		diams = [0.125, 0.140, 0.150, 0.160, 0.170]
-
-		sweep_results = sweep_diameters(prob_rocket, diams)
 		print("\nDiameter parameter sweep:")
-		print(format_sweep_org_table(sweep_results))
+		print(format_sweep_org_table(sweep_diameters(prob)))
 	#endregion
 #endregion
 

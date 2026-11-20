@@ -1,91 +1,48 @@
 #region Imports
 import os
 
-from pathlib import Path
+from importlib.util import find_spec
+from pathlib        import Path
 
-from ..Config import BipropellantConfig, CONSTANTS
-
-from .reac         import Reactant
-from .helpers      import bulk_density
-from .backend_base import ThermochemistryBackend
+from ..Config      import Propellants, Species
+from .backend_base import CombustionState
 #endregion
 
+def bulk_density(blend: tuple[Species, ...]) -> float:
+	"""Density of a blend mixed by mass_fraction [kg/m^3]"""
+	total = sum(s.mass_fraction for s in blend)
+	return 1.0 / sum((s.mass_fraction / total) / s.density for s in blend)
+
 class BEARS_Chem:
-	"""Unified thermochemistry evaluation interface for OpenMDAO"""
+	"""Combustion chemistry of one propellant combination"""
 
-	def __init__(
-		self,
-		backend  : ThermochemistryBackend,
-		rho_ox   : float,
-		rho_fuel : float,
-		p_vap_ox : float | None = None,
-	):
-		self._backend = backend
-		self.rho_ox   = rho_ox
-		self.rho_fuel = rho_fuel
-		self.p_vap_ox = p_vap_ox # Oxidizer saturation pressure [Pa]
+	def __init__(self, propellants: Propellants, backend: str):
+		"""`backend` is the [models] chemistry choice: auto, cea or rocketcea"""
+		self.rho_ox   = propellants.oxidizer.density         # Liquid oxidizer density [kg/m^3]
+		self.rho_fuel = bulk_density(propellants.fuels)      # Fuel grain density [kg/m^3]
+		self.p_vap_ox = propellants.oxidizer.vapor_pressure  # Oxidizer saturation pressure [Pa]
 
-	@classmethod
-	def set_work_dir(cls, path: str | Path):
-		try:
-			import rocketcea.cea_obj as cea_obj
-			abs_path = os.path.abspath(path)
-			os.makedirs(abs_path, exist_ok=True)
-			cea_obj.ROCKETCEA_DATA_DIR = abs_path
-		except ImportError:
-			pass
+		if backend == "auto":
+			backend = "cea" if find_spec("cea") else "rocketcea"
 
-	@classmethod
-	def from_config(
-		cls,
-		config   : BipropellantConfig,
-		backend  : str = "auto",
-		work_dir : str | Path | None = None,
-	) -> "BEARS_Chem":
-		from importlib.util import find_spec
-
-		if work_dir is not None:
-			cls.set_work_dir(work_dir)
-
-		ox_reactants   = tuple(Reactant.from_config(r) for r in config.oxidizers)
-		fuel_reactants = tuple(Reactant.from_config(r) for r in config.fuels)
-
-		rho_ox   = bulk_density(ox_reactants)
-		rho_fuel = bulk_density(fuel_reactants)
-
-		# Saturation pressure of a single-species oxidizer, in Pa
-		p_vap_ox = None
-		if len(ox_reactants) == 1 and ox_reactants[0].vapor_pressure is not None:
-			p_vap_ox = ox_reactants[0].vapor_pressure * 1e5
-
-		selected = backend.lower()
-		if selected == "auto":
-			selected = "cea" if find_spec("cea") else "rocketcea"
-
-		match selected:
+		match backend:
 			case "cea":
 				from .backend_cea import CEABackend
-				engine = CEABackend(ox_reactants, fuel_reactants)
+				self._backend = CEABackend(propellants)
 			case "rocketcea":
 				from .backend_rocketcea import RocketCEABackend
-				engine = RocketCEABackend(ox_reactants, fuel_reactants)
-			case _:
-				raise ValueError(f"Unknown chemistry backend: '{backend}'")
+				self._backend = RocketCEABackend(propellants)
 
-		return cls(engine, rho_ox, rho_fuel, p_vap_ox)
+	@staticmethod
+	def set_work_dir(path: str | Path):
+		"""Keep the RocketCEA scratch files in `path`, if RocketCEA is installed"""
+		if find_spec("rocketcea") is None: return
 
-	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
-		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
-		return self._backend.get_chamber_gas(pc_pa, mr)
+		import rocketcea.cea_obj as cea_obj
+		abs_path = os.path.abspath(path)
+		os.makedirs(abs_path, exist_ok=True)
+		cea_obj.ROCKETCEA_DATA_DIR = abs_path
 
-	def get_tcomb(self, pc_pa: float, mr: float) -> float:
-		return self._backend.get_tcomb(pc_pa, mr)
-
-	def get_isp(
-		self,
-		pc_pa    : float,
-		mr       : float,
-		eps      : float,
-		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
-	) -> float:
-		return self._backend.get_isp(pc_pa, mr, eps, p_amb_pa)
+	def evaluate(self, pc_pa: float, mr: float, eps: float) -> CombustionState:
+		"""Equilibrium state at chamber pressure [Pa], mixture ratio and expansion ratio"""
+		return self._backend.evaluate(pc_pa, mr, eps)

@@ -1,25 +1,23 @@
 #region Imports
-from typing import Protocol, runtime_checkable
-
-from ..Config import CONSTANTS
+from dataclasses import dataclass
+from typing      import Protocol, runtime_checkable
 #endregion
+
+@dataclass(frozen=True)
+class CombustionState:
+	"""Equilibrium combustion result, in SI units"""
+	isp        : float  # Ideal specific impulse at sea-level ambient pressure [s]
+	t_chamber  : float  # Adiabatic flame temperature in the chamber [K]
+	molar_mass : float  # Molar mass of the chamber gas [kg/mol]
+	gamma      : float  # Ratio of specific heats of the chamber gas [-]
 
 @runtime_checkable
 class ThermochemistryBackend(Protocol):
-	"""Abstract protocol for chemical equilibrium backends"""
+	"""Chemical equilibrium solver"""
 
-	def get_chamber_gas(self, pc_pa: float, mr: float) -> tuple[float, float]:
-		"""Chamber gas (molar mass [kg/kmol], ratio of specific heats)"""
-		...
-
-	def get_tcomb(self, pc_pa: float, mr: float) -> float:
-		...
-
-	def get_isp(
+	def evaluate(
 		self,
-		pc_pa    : float,
-		mr       : float,
-		eps      : float,
-		p_amb_pa : float = CONSTANTS.atmosphere.sea_level_pressure,
-	) -> float:
-		...
+		pc_pa : float,  # Chamber pressure [Pa]
+		mr    : float,  # Mixture ratio, oxidizer over fuel mass flow [-]
+		eps   : float,  # Nozzle expansion ratio A_exit / A_throat [-]
+	) -> CombustionState: ...
